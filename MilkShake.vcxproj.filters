@@ -27,6 +27,15 @@
     <ClCompile Include="External Libraries\stb\stb_image.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\Renderer\Buffer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Renderer\Model.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Renderer\Texture.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Renderer\Utilities\VKUtilities.h">
@@ -41,9 +50,35 @@
     <ClInclude Include="External Libraries\stb\stb_image.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\Renderer\Utilities\AcclerationStructure.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Renderer\Buffer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="assets\shaders\ShaderCommon.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Renderer\Model.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Renderer\Texture.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Math\AssimpGLMHelpers.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="assets\shaders\default.frag" />
     <None Include="assets\shaders\default.vert" />
+    <None Include="assets\shaders\geometrytypes.glsl" />
+    <None Include="assets\shaders\miss.rmiss" />
+    <None Include="assets\shaders\random.glsl" />
+    <None Include="assets\shaders\raygen.rgen" />
+    <None Include="assets\shaders\shadow.rmiss" />
+    <None Include="assets\shaders\closesthit.rchit" />
+    <None Include="assets\shaders\bufferreferences.glsl" />
+    <None Include="assets\shaders\anyhit.rahit" />
   </ItemGroup>
 </Project>

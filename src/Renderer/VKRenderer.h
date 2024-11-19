@@ -24,8 +24,11 @@
 #include <optional>
 #include <set>
 
+#include "Model.h"
+
 #include "Utilities/VKUtilities.h"
 #include "Utilities/VKValidation.h"
+#include "Utilities/AcclerationStructure.h"
 
 namespace MilkShake
 {
@@ -253,23 +256,8 @@ namespace MilkShake
 
                 void CreateCommandBuffers();
                 void CreateSyncObjects();
-                // -- Ray Tracing Create Stuff
-                void InitRayTracing();
 
                 // - Helper Functions
-                // -- Texture/Depth Functions
-                VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
-                VkFormat FindDepthFormat();
-                bool HasStencilComponent(VkFormat format);
-                // -- Image Buffer Functions
-                void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
-                void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
-                // -- Command Functions
-                VkCommandBuffer BeginSingleTimeCommands();
-                void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
-                // -- Buffer Functions
-                void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
-                uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
                 // -- !!Renderer Loop Functions!!
                 void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
                 void UpdateUniformBuffer(uint32_t currentImage);
@@ -294,6 +282,118 @@ namespace MilkShake
                     auto app = reinterpret_cast<VKRenderer*>(glfwGetWindowUserPointer(window));
                     app->m_FramebufferResized = true;
                 }
+            // Getter (Vulkan-Core Component)
+            public:
+                VkDevice GetDevice() const { return m_Device; }
+                VkPhysicalDevice GetPhysicalDevice() const { return m_PhysicalDevice; }
+                VkQueue GetGraphicsQueue() const { return m_GraphicsQueue; }
+
+            // Loading Model & Texture Stuff
+            private:
+                Model m_Model;
+
+            // Acceleration Structures + Ray-Tracing
+            private:
+                // Function pointers for ray tracing related stuff
+                PFN_vkGetBufferDeviceAddressKHR vkGetBufferDeviceAddressKHR;
+                PFN_vkCreateAccelerationStructureKHR vkCreateAccelerationStructureKHR;
+                PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR;
+                PFN_vkGetAccelerationStructureBuildSizesKHR vkGetAccelerationStructureBuildSizesKHR;
+                PFN_vkGetAccelerationStructureDeviceAddressKHR vkGetAccelerationStructureDeviceAddressKHR;
+                PFN_vkBuildAccelerationStructuresKHR vkBuildAccelerationStructuresKHR;
+                PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR;
+                PFN_vkCmdTraceRaysKHR vkCmdTraceRaysKHR;
+                PFN_vkGetRayTracingShaderGroupHandlesKHR vkGetRayTracingShaderGroupHandlesKHR;
+                PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR;
+
+                // Available features and properties
+                VkPhysicalDeviceRayTracingPipelinePropertiesKHR  m_RayTracingPipelineProperties{};
+                VkPhysicalDeviceAccelerationStructureFeaturesKHR m_AccelerationStructureFeatures{};
+
+                VkPipeline m_RtPipeline;
+                VkPipelineLayout m_RtPipelineLayout;
+
+                VkDescriptorPool m_RtDescriptorPool;
+                VkDescriptorSet m_RtDescriptorSet;
+                VkDescriptorSetLayout m_RtDescriptorSetLayout;
+
+                AccelerationStructure m_BottomLevelAS{};
+                AccelerationStructure m_TopLevelAS{};
+
+                VkImage m_StorageImage;
+                VkDeviceMemory m_StorageImageMemory;
+                VkImageView m_StorageImageView;
+
+                Buffer m_RtVertexBuffer;
+                Buffer m_RtIndexBuffer;
+                uint32_t m_RtIndexCount{ 0 };
+                Buffer m_RtTransformBuffer;
+
+                UniformBufferObject uniformData;
+                Buffer m_RtUniformBuffer;
+
+                struct GeometryNode 
+                {
+                    uint64_t vertexBufferDeviceAddress;
+                    uint64_t indexBufferDeviceAddress;
+                    int32_t textureIndexBaseColor;
+                    int32_t textureIndexOcclusion;
+                };
+                Buffer m_GeometryNodesBuffer;
+
+                std::vector<VkRayTracingShaderGroupCreateInfoKHR> m_ShaderGroups{};
+                struct ShaderBindingTables
+                {
+                    ShaderBindingTable raygen;
+                    ShaderBindingTable miss;
+                    ShaderBindingTable hit;
+
+                } m_ShaderBindingTables;
+
+                // Core Ray-Tracing Function
+                void InitRayTracing();
+
+                // Create a scratch buffer to hold temporary data for a ray tracing acceleration structure
+                ScratchBuffer CreateScratchBuffer(VkDeviceSize size);
+                void DeleteScratchBuffer(ScratchBuffer& scratchBuffer);
+
+                void CreateAccelerationStructure(AccelerationStructure& accelerationStructure, VkAccelerationStructureTypeKHR type, VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo);
+                void DeleteAccelerationStructure(AccelerationStructure& accelerationStructure);
+
+                void CreateAccelerationStructureBuffer(AccelerationStructure& accelerationStructure, VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo);
+
+                // Create the bottom level acceleration structure contains the scene's actual geometry (vertices, triangles)
+                void CreateBottomLevelAccelerationStructure();
+                // The top level acceleration structure contains the scene's object instances
+                void CreateTopLevelAccelerationStructure();
+
+                /*
+                    Create the Shader Binding Tables that binds the programs and top-level acceleration structure
+
+                    SBT Layout used in this sample:
+
+                        /-------------------\
+                        |       raygen      |
+                        |-------------------|
+                        |   miss + shadow   |
+                        |-------------------|
+                        |     hit + any     |
+                        \-------------------/
+
+                */
+                void CreateShaderBindingTable(ShaderBindingTable& shaderBindingTable, uint32_t handleCount);
+                void CreateShaderBindingTables();
+
+                void CreateRayTracingPipeline();
+                void CreateRayTracingDescriptorSets();
+                void CreateRayTracingUniformBuffer();
+
+                // Gets the device address from a buffer that's required for some of the buffers used for ray tracing
+                uint64_t GetBufferDeviceAddress(VkBuffer buffer);
+                VkStridedDeviceAddressRegionKHR GetSbtEntryStridedDeviceAddressRegion(VkBuffer buffer, uint32_t handleCount);
+
+                void CreateStorageImage();
+                void DestroyStorageImage();
         };
     }
 }

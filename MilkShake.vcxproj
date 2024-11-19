@@ -114,6 +114,10 @@
       <AdditionalLibraryDirectories>$(SolutionDir)External Libraries\GLFW\lib-vc2022;$(SolutionDir)External Libraries\assimp\lib64;$(SolutionDir)External Libraries\vulkan\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;shaderc_combinedd.lib;assimp-vc142-mtd.lib;glfw3.lib;User32.lib;Gdi32.lib;Shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>
+copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mtd.dll" "$(OutDir)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -139,18 +143,35 @@
   <ItemGroup>
     <ClCompile Include="External Libraries\stb\stb_image.cpp" />
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\Renderer\Buffer.cpp" />
+    <ClCompile Include="src\Renderer\Model.cpp" />
+    <ClCompile Include="src\Renderer\Texture.cpp" />
     <ClCompile Include="src\Renderer\Utilities\VKUtilities.cpp" />
     <ClCompile Include="src\Renderer\VKRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="assets\shaders\ShaderCommon.h" />
     <ClInclude Include="External Libraries\stb\stb_image.h" />
+    <ClInclude Include="src\Math\AssimpGLMHelpers.h" />
+    <ClInclude Include="src\Renderer\Buffer.h" />
+    <ClInclude Include="src\Renderer\Model.h" />
+    <ClInclude Include="src\Renderer\Texture.h" />
+    <ClInclude Include="src\Renderer\Utilities\AcclerationStructure.h" />
     <ClInclude Include="src\Renderer\Utilities\VKUtilities.h" />
     <ClInclude Include="src\Renderer\Utilities\VKValidation.h" />
     <ClInclude Include="src\Renderer\VKRenderer.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="assets\shaders\anyhit.rahit" />
+    <None Include="assets\shaders\bufferreferences.glsl" />
+    <None Include="assets\shaders\closesthit.rchit" />
     <None Include="assets\shaders\default.frag" />
     <None Include="assets\shaders\default.vert" />
+    <None Include="assets\shaders\geometrytypes.glsl" />
+    <None Include="assets\shaders\miss.rmiss" />
+    <None Include="assets\shaders\random.glsl" />
+    <None Include="assets\shaders\raygen.rgen" />
+    <None Include="assets\shaders\shadow.rmiss" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
