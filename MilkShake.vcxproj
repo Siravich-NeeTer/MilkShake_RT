@@ -150,7 +150,6 @@ copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mtd.dll" "$(OutD
     <ClCompile Include="src\Renderer\VKRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="assets\shaders\ShaderCommon.h" />
     <ClInclude Include="External Libraries\stb\stb_image.h" />
     <ClInclude Include="src\Math\AssimpGLMHelpers.h" />
     <ClInclude Include="src\Renderer\Buffer.h" />

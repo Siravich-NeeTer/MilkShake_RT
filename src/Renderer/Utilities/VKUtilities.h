@@ -40,7 +40,7 @@ namespace MilkShake
 					std::vector<std::string> includeDirs_;  // List of directories to search for include files
 			};
 
-			VkPipelineShaderStageCreateInfo LoadShader(VkDevice device, const std::filesystem::path& shaderPath);
+			VkPipelineShaderStageCreateInfo LoadShader(VKRenderer& _vkRenderer, const std::filesystem::path& shaderPath);
 			std::vector<uint32_t> ReadFile(const std::filesystem::path& shaderPath);
 			shaderc_shader_kind GetShaderKind(const std::filesystem::path& shaderPath);
 			VkShaderStageFlagBits GetShaderStageFlag(const std::filesystem::path& shaderPath);

@@ -54,7 +54,7 @@ namespace MilkShake
 				}
 			}
 
-			VkPipelineShaderStageCreateInfo LoadShader(VkDevice device, const std::filesystem::path& shaderPath)
+			VkPipelineShaderStageCreateInfo LoadShader(VKRenderer& _vkRenderer, const std::filesystem::path& shaderPath)
 			{
 				std::vector<uint32_t> code = Shader::ReadFile(shaderPath);
 
@@ -64,10 +64,11 @@ namespace MilkShake
 				shaderModuleCreateInfo.pCode = code.data();
 
 				VkShaderModule shaderModule;
-				if (vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule) != VK_SUCCESS)
+				if (vkCreateShaderModule(_vkRenderer.GetDevice(), &shaderModuleCreateInfo, nullptr, &shaderModule) != VK_SUCCESS)
 				{
 					throw std::runtime_error("failed to create shader module!");
 				}
+				_vkRenderer.AddShaderModule(shaderModule);
 
 				VkPipelineShaderStageCreateInfo shaderStageCreateInfo{};
 				shaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;

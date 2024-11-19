@@ -61,6 +61,7 @@ namespace MilkShake
 
 			public:
 				Model() = default;
+				~Model();
 				void LoadModel(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, const std::filesystem::path& _filePath);
 
 				const std::vector<VertexObject>& GetVertices() const { return m_Vertices; }

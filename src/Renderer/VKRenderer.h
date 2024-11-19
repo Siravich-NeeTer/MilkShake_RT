@@ -218,6 +218,9 @@ namespace MilkShake
 
                 bool m_FramebufferResized = false;
 
+                // Hold ShaderModule from Shader::LoadShader functions
+                std::vector<VkShaderModule> m_ShaderModules;
+
                 // - Core Functions
                 void InitWindow();
                 void InitVulkan();
@@ -282,15 +285,17 @@ namespace MilkShake
                     auto app = reinterpret_cast<VKRenderer*>(glfwGetWindowUserPointer(window));
                     app->m_FramebufferResized = true;
                 }
-            // Getter (Vulkan-Core Component)
+            // Getter & Setter (Vulkan-Core Component)
             public:
+                void AddShaderModule(const VkShaderModule& _shaderModule) { m_ShaderModules.push_back(_shaderModule); }
+
                 VkDevice GetDevice() const { return m_Device; }
                 VkPhysicalDevice GetPhysicalDevice() const { return m_PhysicalDevice; }
                 VkQueue GetGraphicsQueue() const { return m_GraphicsQueue; }
 
             // Loading Model & Texture Stuff
             private:
-                Model m_Model;
+                Model* m_Model;
 
             // Acceleration Structures + Ray-Tracing
             private:
@@ -352,6 +357,7 @@ namespace MilkShake
 
                 // Core Ray-Tracing Function
                 void InitRayTracing();
+                void CleanRayTracing();
 
                 // Create a scratch buffer to hold temporary data for a ray tracing acceleration structure
                 ScratchBuffer CreateScratchBuffer(VkDeviceSize size);

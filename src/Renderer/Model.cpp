@@ -14,6 +14,16 @@ namespace MilkShake
 			return (std::string::npos == pos ? "" : _path.string().substr(0, pos + 1));
 		}
 
+		Model::~Model()
+		{
+			for (auto& texture : m_Textures)
+			{
+				delete texture;
+			}
+
+			m_VertexBuffer.Destroy();
+			m_IndexBuffer.Destroy();
+		}
 		void Model::LoadModel(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, const std::filesystem::path& _filePath)
 		{
 			Assimp::Importer importer;

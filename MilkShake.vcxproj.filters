@@ -56,9 +56,6 @@
     <ClInclude Include="src\Renderer\Buffer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="assets\shaders\ShaderCommon.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\Renderer\Model.h">
       <Filter>Header Files</Filter>
     </ClInclude>

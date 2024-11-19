@@ -46,8 +46,8 @@ namespace MilkShake
             CreateCommandBuffers();
             CreateSyncObjects();
 
-
-            m_Model.LoadModel(*this, m_CommandPool, "assets/models/viking_room.obj");
+            m_Model = new Model();
+            m_Model->LoadModel(*this, m_CommandPool, "assets/models/viking_room.obj");
             InitRayTracing();
         }
         void VKRenderer::MainLoop()
@@ -62,6 +62,14 @@ namespace MilkShake
         }
         void VKRenderer::Cleanup()
         {
+            CleanRayTracing();
+            for (auto& shaderModule : m_ShaderModules)
+            {
+                vkDestroyShaderModule(m_Device, shaderModule, nullptr);
+            }
+            m_ShaderModules.clear();
+            delete m_Model;
+
             CleanupSwapChain();
 
             vkDestroyPipeline(m_Device, m_GraphicsPipeline, nullptr);
@@ -1380,6 +1388,29 @@ namespace MilkShake
             CreateShaderBindingTables();
             CreateRayTracingDescriptorSets();
         }
+        void VKRenderer::CleanRayTracing()
+        {
+            vkDestroyPipeline(m_Device, m_RtPipeline, nullptr);
+            vkDestroyPipelineLayout(m_Device, m_RtPipelineLayout, nullptr);
+            vkDestroyDescriptorPool(m_Device, m_RtDescriptorPool, nullptr);
+            vkDestroyDescriptorSetLayout(m_Device, m_RtDescriptorSetLayout, nullptr);
+
+            DestroyStorageImage();
+            DeleteAccelerationStructure(m_BottomLevelAS);
+            DeleteAccelerationStructure(m_TopLevelAS);
+
+
+            m_RtVertexBuffer.Destroy();
+            m_RtIndexBuffer.Destroy();
+            m_RtTransformBuffer.Destroy();
+
+            m_ShaderBindingTables.raygen.Destroy();
+            m_ShaderBindingTables.miss.Destroy();
+            m_ShaderBindingTables.hit.Destroy();
+
+            m_RtUniformBuffer.Destroy();
+            m_GeometryNodesBuffer.Destroy();
+        }
         
         ScratchBuffer VKRenderer::CreateScratchBuffer(VkDeviceSize size)
         {
@@ -1497,7 +1528,7 @@ namespace MilkShake
         void VKRenderer::CreateBottomLevelAccelerationStructure()
         {
             std::vector<VkTransformMatrixKHR> transformMatrices{};
-            for (auto node : m_Model.GetLinearNode())
+            for (auto node : m_Model->GetLinearNode())
             {
                 if (!node->mesh.primitives.empty())
                 {
@@ -1528,7 +1559,7 @@ namespace MilkShake
             std::vector<VkAccelerationStructureBuildRangeInfoKHR> buildRangeInfos{};
             std::vector<VkAccelerationStructureBuildRangeInfoKHR*> pBuildRangeInfos{};
             std::vector<GeometryNode> geometryNodes{};
-            for (auto node : m_Model.GetLinearNode())
+            for (auto node : m_Model->GetLinearNode())
             {
                 if (!node->mesh.primitives.empty())
                 {
@@ -1540,8 +1571,8 @@ namespace MilkShake
                             VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress{};
                             VkDeviceOrHostAddressConstKHR transformBufferDeviceAddress{};
 
-                            vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(m_Model.GetVertexBuffer().buffer);// +primitive->firstVertex * sizeof(vkglTF::Vertex);
-                            indexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(m_Model.GetIndexBuffer().buffer) + primitive.firstIndex * sizeof(uint32_t);
+                            vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(m_Model->GetVertexBuffer().buffer);// +primitive->firstVertex * sizeof(vkglTF::Vertex);
+                            indexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(m_Model->GetIndexBuffer().buffer) + primitive.firstIndex * sizeof(uint32_t);
                             transformBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(m_RtTransformBuffer.buffer) + static_cast<uint32_t>(geometryNodes.size()) * sizeof(VkTransformMatrixKHR);
 
                             VkAccelerationStructureGeometryKHR geometry{};
@@ -1550,7 +1581,7 @@ namespace MilkShake
                             geometry.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
                             geometry.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
                             geometry.geometry.triangles.vertexData = vertexBufferDeviceAddress;
-                            geometry.geometry.triangles.maxVertex = m_Model.GetVertices().size();
+                            geometry.geometry.triangles.maxVertex = m_Model->GetVertices().size();
                             //geometry.geometry.triangles.maxVertex = primitive->vertexCount;
                             geometry.geometry.triangles.vertexStride = sizeof(VertexObject);
                             geometry.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
@@ -1787,7 +1818,7 @@ namespace MilkShake
         void VKRenderer::CreateRayTracingPipeline()
         {
             // [DONE] TODO: Added TextureCount on model
-            uint32_t imageCount = static_cast<uint32_t>(m_Model.GetTextures().size());
+            uint32_t imageCount = static_cast<uint32_t>(m_Model->GetTextures().size());
 
             std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings =
             {
@@ -1839,7 +1870,7 @@ namespace MilkShake
             std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
             // Ray generation group
             {
-                shaderStages.push_back(Shader::LoadShader(m_Device, "assets/shaders/raygen.rgen"));
+                shaderStages.push_back(Shader::LoadShader(*this, "assets/shaders/raygen.rgen"));
                 VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
                 shaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
                 shaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -1851,7 +1882,7 @@ namespace MilkShake
             }
             // Miss group
             {
-                shaderStages.push_back(Shader::LoadShader(m_Device, "assets/shaders/miss.rmiss"));
+                shaderStages.push_back(Shader::LoadShader(*this, "assets/shaders/miss.rmiss"));
                 VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
                 shaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
                 shaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -1862,13 +1893,13 @@ namespace MilkShake
                 m_ShaderGroups.push_back(shaderGroup);
 
                 // Second shader for shadows
-                shaderStages.push_back(Shader::LoadShader(m_Device, "assets/shaders/shadow.rmiss"));
+                shaderStages.push_back(Shader::LoadShader(*this, "assets/shaders/shadow.rmiss"));
                 shaderGroup.generalShader = static_cast<uint32_t>(shaderStages.size()) - 1;
                 m_ShaderGroups.push_back(shaderGroup);
             }
             // Closest hit group for doing texture lookups
             {
-                shaderStages.push_back(Shader::LoadShader(m_Device, "assets/shaders/closesthit.rchit"));
+                shaderStages.push_back(Shader::LoadShader(*this, "assets/shaders/closesthit.rchit"));
                 VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
                 shaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
                 shaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
@@ -1877,7 +1908,7 @@ namespace MilkShake
                 shaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
 
                 // This group also uses an anyhit shader for doing transparency (see anyhit.rahit for details)
-                shaderStages.push_back(Shader::LoadShader(m_Device, "assets/shaders/anyhit.rahit"));
+                shaderStages.push_back(Shader::LoadShader(*this, "assets/shaders/anyhit.rahit"));
                 shaderGroup.anyHitShader = static_cast<uint32_t>(shaderStages.size()) - 1;
                 m_ShaderGroups.push_back(shaderGroup);
             }
@@ -1898,7 +1929,7 @@ namespace MilkShake
         void VKRenderer::CreateRayTracingDescriptorSets()
         {
             // [DONE] TODO: Load Texture
-            uint32_t imageCount = static_cast<uint32_t>(m_Model.GetTextures().size());
+            uint32_t imageCount = static_cast<uint32_t>(m_Model->GetTextures().size());
             std::vector<VkDescriptorPoolSize> poolSizes = {
                 { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1 },
                 { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 },
@@ -1980,7 +2011,7 @@ namespace MilkShake
             // Image descriptors for the image array
             std::vector<VkDescriptorImageInfo> textureDescriptors{};
             // [DONE] TODO: Load Model Texture
-            for (auto& texture : m_Model.GetTextures()) {
+            for (auto& texture : m_Model->GetTextures()) {
                 VkDescriptorImageInfo descriptor{};
                 descriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 descriptor.sampler = texture->GetSampler();
