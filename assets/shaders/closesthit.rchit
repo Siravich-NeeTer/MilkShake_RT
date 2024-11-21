@@ -13,9 +13,11 @@
 #extension GL_EXT_scalar_block_layout : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
-layout(location = 0) rayPayloadInEXT vec3 hitValue;
-layout(location = 2) rayPayloadEXT bool shadowed;
-hitAttributeEXT vec2 attribs;
+#include "shared_structs.h"
+
+layout(location = 4) rayPayloadInEXT RayPayload payload;
+
+hitAttributeEXT vec2 bc;
 
 layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
 layout(binding = 3, set = 0) uniform sampler2D image;
@@ -35,29 +37,18 @@ layout(binding = 5, set = 0) uniform sampler2D textures[];
 
 void main()
 {
-	Triangle tri = unpackTriangle(gl_PrimitiveID, 112);
-	hitValue = vec3(tri.normal);
+	
+    // @@ Raycasting: Set payload.hit = true, and fill in the
+    // remaining payload values with information (provided by Vulkan)
+    // about the hit point.
+    payload.hit = true;
 
-	GeometryNode geometryNode = geometryNodes.nodes[gl_GeometryIndexEXT];
+    payload.instanceIndex = gl_InstanceCustomIndexEXT;
+    payload.primitiveIndex = gl_PrimitiveID;
+    payload.bc = vec3(1.0-bc.x-bc.y, bc.x, bc.y);
+    payload.hitPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+    payload.hitDist = gl_HitTEXT;
 
-	vec3 color = texture(textures[nonuniformEXT(geometryNode.textureIndexBaseColor)], tri.uv).rgb;
-	if (geometryNode.textureIndexOcclusion > -1) {
-		float occlusion = texture(textures[nonuniformEXT(geometryNode.textureIndexOcclusion)], tri.uv).r;
-		color *= occlusion;
-	}
-
-	hitValue = color;
-
-	// Shadow casting
-	float tmin = 0.001;
-	float tmax = 10000.0;
-	float epsilon = 0.001;
-	vec3 origin = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT + tri.normal * epsilon;
-	shadowed = true;  
-	vec3 lightVector = vec3(-5.0, -2.5, -5.0);
-	// Trace shadow ray and offset indices to match shadow hit/miss shader group indices
-//	traceRayEXT(topLevelAS, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT, 0xFF, 0, 0, 1, origin, tmin, lightVector, tmax, 2);
-//	if (shadowed) {
-//		hitValue *= 0.7;
-//	}
+	Triangle tri = UnpackTriangle(gl_PrimitiveID, 48);
+    payload.normal = vec3(tri.normal);
 }

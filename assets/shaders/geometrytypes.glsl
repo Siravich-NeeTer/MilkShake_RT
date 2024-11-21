@@ -18,7 +18,8 @@ struct Triangle {
 };
 
 // This function will unpack our vertex buffer data into a single triangle and calculates uv coordinates
-Triangle unpackTriangle(uint index, int vertexSize) {
+Triangle UnpackTriangle(uint index, int vertexSize) 
+{
 	Triangle tri;
 	const uint triIndex = index * 3;
 
@@ -34,8 +35,10 @@ Triangle unpackTriangle(uint index, int vertexSize) {
 	// glm::vec3 normal;
 	// glm::vec2 uv;
 	// ...
-	for (uint i = 0; i < 3; i++) {
-		const uint offset = indices.i[triIndex + i] * 6;
+	for (uint i = 0; i < 3; i++) 
+	{
+		// use * 2 since the VertexObject contain 3 components so 2 offsets...
+		const uint offset = indices.i[triIndex + i] * 2;
 		vec4 d0 = vertices.v[offset + 0]; // pos.xyz, n.x
 		vec4 d1 = vertices.v[offset + 1]; // n.yz, uv.xy
 		tri.vertices[i].pos = d0.xyz;
@@ -43,7 +46,7 @@ Triangle unpackTriangle(uint index, int vertexSize) {
 		tri.vertices[i].uv = d1.zw;
 	}
 	// Calculate values at barycentric coordinates
-	vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
+	vec3 barycentricCoords = vec3(1.0f - bc.x - bc.y, bc.x, bc.y);
 	tri.uv = tri.vertices[0].uv * barycentricCoords.x + tri.vertices[1].uv * barycentricCoords.y + tri.vertices[2].uv * barycentricCoords.z;
 	tri.normal = tri.vertices[0].normal * barycentricCoords.x + tri.vertices[1].normal * barycentricCoords.y + tri.vertices[2].normal * barycentricCoords.z;
 	return tri;

@@ -50,12 +50,17 @@ namespace MilkShake
 				{
 					if (material->GetTextureCount(static_cast<aiTextureType>(materialType)) > 0)
 					{
-						aiString texturePath;
-						material->GetTexture(static_cast<aiTextureType>(materialType), 0, &texturePath);
+						aiString aiTexturePath;
+						material->GetTexture(static_cast<aiTextureType>(materialType), 0, &aiTexturePath);
 
-						m_Textures.push_back(new Texture(_vkRenderer, _commandPool, GetDirectory(_filePath) + texturePath.C_Str()));
+						std::filesystem::path texturePath = GetDirectory(_filePath) + aiTexturePath.C_Str();
 
-						break;
+						if (m_TextureMap[texturePath])
+							continue;
+
+						std::cout << "LOAD : " << texturePath << "\n";
+						m_Textures.push_back(new Texture(_vkRenderer, _commandPool, texturePath));
+						m_TextureMap[texturePath] = true;
 					}
 				}
 			}
@@ -132,7 +137,6 @@ namespace MilkShake
 				{
 					vertex.texCoord = glm::vec2(0.0f, 0.0f);
 				}
-				vertex.color = glm::vec3(1.0f);
 
 				m_Vertices.push_back(vertex);
 			}

@@ -14,7 +14,7 @@
 
 layout(location = 3) rayPayloadInEXT uint payloadSeed;
 
-hitAttributeEXT vec2 attribs;
+hitAttributeEXT vec2 bc;
 
 layout(binding = 3, set = 0) uniform sampler2D image;
 
@@ -34,7 +34,10 @@ layout(binding = 5, set = 0) uniform sampler2D textures[];
 
 void main()
 {
-	Triangle tri = unpackTriangle(gl_PrimitiveID, 112);
+	ignoreIntersectionEXT;
+	return;
+
+	Triangle tri = UnpackTriangle(gl_PrimitiveID, 112);
 	GeometryNode geometryNode = geometryNodes.nodes[gl_GeometryIndexEXT];
 	vec4 color = texture(textures[nonuniformEXT(geometryNode.textureIndexBaseColor)], tri.uv);
 	// If the alpha value of the texture at the current UV coordinates is below a given threshold, we'll ignore this intersection

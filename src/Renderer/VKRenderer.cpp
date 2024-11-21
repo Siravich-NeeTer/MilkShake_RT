@@ -47,7 +47,7 @@ namespace MilkShake
             CreateSyncObjects();
 
             m_Model = new Model();
-            m_Model->LoadModel(*this, m_CommandPool, "assets/models/viking_room.obj");
+            m_Model->LoadModel(*this, m_CommandPool, "assets/models/FlightHelmet.gltf");
             InitRayTracing();
         }
         void VKRenderer::MainLoop()
@@ -377,7 +377,7 @@ namespace MilkShake
             createInfo.imageColorSpace = surfaceFormat.colorSpace;
             createInfo.imageExtent = extent;
             createInfo.imageArrayLayers = 1;
-            createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+            createInfo.imageUsage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
             QueueFamilyIndices indices = FindQueueFamilies(m_PhysicalDevice);
             uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
@@ -702,18 +702,18 @@ namespace MilkShake
 
             stbi_image_free(pixels);
 
-            CreateImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_TextureImage, m_TextureImageMemory);
+            CreateImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_TextureImage, m_TextureImageMemory);
 
-            Utility::TransitionImageLayout(*this, m_CommandPool, m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            Utility::TransitionImageLayout(*this, m_CommandPool, m_TextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
             Utility::CopyBufferToImage(*this, m_CommandPool, stagingBuffer, m_TextureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-            Utility::TransitionImageLayout(*this, m_CommandPool, m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            Utility::TransitionImageLayout(*this, m_CommandPool, m_TextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
             vkDestroyBuffer(m_Device, stagingBuffer, nullptr);
             vkFreeMemory(m_Device, stagingBufferMemory, nullptr);
         }
         void VKRenderer::CreateTextureImageView()
         {
-            m_TextureImageView = CreateImageView(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+            m_TextureImageView = CreateImageView(m_TextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
         }
         void VKRenderer::CreateTextureSampler()
         {
@@ -999,49 +999,40 @@ namespace MilkShake
                 throw std::runtime_error("failed to begin recording command buffer!");
             }
 
-            VkRenderPassBeginInfo renderPassInfo{};
-            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            renderPassInfo.renderPass = m_RenderPass;
-            renderPassInfo.framebuffer = m_SwapChainFramebuffers[imageIndex];
-            renderPassInfo.renderArea.offset = { 0, 0 };
-            renderPassInfo.renderArea.extent = m_SwapChainExtent;
+            /*
+                Dispatch the ray tracing commands
+            */
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RtPipeline);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RtPipelineLayout, 0, 1, &m_RtDescriptorSet, 0, 0);
 
-            std::array<VkClearValue, 2> clearValues{};
-            clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
-            clearValues[1].depthStencil = { 1.0f, 0 };
+            VkStridedDeviceAddressRegionKHR emptySbtEntry = {};
+            vkCmdTraceRaysKHR(
+                commandBuffer,
+                &m_ShaderBindingTables.raygen.stridedDeviceAddressRegion,
+                &m_ShaderBindingTables.miss.stridedDeviceAddressRegion,
+                &m_ShaderBindingTables.hit.stridedDeviceAddressRegion,
+                &emptySbtEntry,
+                m_SwapChainExtent.width,
+                m_SwapChainExtent.height,
+                1);
 
-            renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-            renderPassInfo.pClearValues = clearValues.data();
+            Utility::TransitionImageLayout(*this, commandBuffer,
+                m_SwapChainImages[imageIndex], VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            Utility::TransitionImageLayout(*this, commandBuffer,
+                m_StorageImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
-            vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+            VkImageCopy copyRegion{};
+            copyRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+            copyRegion.srcOffset = { 0, 0, 0 };
+            copyRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+            copyRegion.dstOffset = { 0, 0, 0 };
+            copyRegion.extent = { m_SwapChainExtent.width, m_SwapChainExtent.height, 1 };
+            vkCmdCopyImage(commandBuffer, m_StorageImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_SwapChainImages[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
-
-            VkViewport viewport{};
-            viewport.x = 0.0f;
-            viewport.y = 0.0f;
-            viewport.width = (float)m_SwapChainExtent.width;
-            viewport.height = (float)m_SwapChainExtent.height;
-            viewport.minDepth = 0.0f;
-            viewport.maxDepth = 1.0f;
-            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-
-            VkRect2D scissor{};
-            scissor.offset = { 0, 0 };
-            scissor.extent = m_SwapChainExtent;
-            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
-            VkBuffer vertexBuffers[] = { m_VertexBuffer };
-            VkDeviceSize offsets[] = { 0 };
-            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-
-            vkCmdBindIndexBuffer(commandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
-
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &m_DescriptorSets[m_CurrentFrame], 0, nullptr);
-
-            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
-
-            vkCmdEndRenderPass(commandBuffer);
+            Utility::TransitionImageLayout(*this, commandBuffer,
+                m_SwapChainImages[imageIndex], VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+            Utility::TransitionImageLayout(*this, commandBuffer,
+                m_StorageImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 
             if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
             {
@@ -1075,6 +1066,8 @@ namespace MilkShake
             if (result == VK_ERROR_OUT_OF_DATE_KHR)
             {
                 RecreateSwapChain();
+                ReCreateStorageImage();
+                uniformData.frame = 0;
                 return;
             }
             else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
@@ -1082,11 +1075,11 @@ namespace MilkShake
                 throw std::runtime_error("failed to acquire swap chain image!");
             }
 
-            UpdateUniformBuffer(m_CurrentFrame);
+            UpdateRayTracingUniformBuffer();
 
             vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame]);
 
-            vkResetCommandBuffer(m_CommandBuffers[m_CurrentFrame], /*VkCommandBufferResetFlagBits*/ 0);
+            vkResetCommandBuffer(m_CommandBuffers[m_CurrentFrame], VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
             RecordCommandBuffer(m_CommandBuffers[m_CurrentFrame], imageIndex);
 
             VkSubmitInfo submitInfo{};
@@ -1128,6 +1121,8 @@ namespace MilkShake
             {
                 m_FramebufferResized = false;
                 RecreateSwapChain();
+                ReCreateStorageImage();
+                uniformData.frame = 0;
             }
             else if (result != VK_SUCCESS)
             {
@@ -1537,7 +1532,7 @@ namespace MilkShake
                         if (primitive.indexCount > 0)
                         {
                             VkTransformMatrixKHR transformMatrix{};
-                            auto m = glm::mat3x4(glm::transpose(node->matrix));
+                            auto m = glm::mat3x4(glm::transpose(node->GetWorldMatrix()));
                             memcpy(&transformMatrix, (void*)&m, sizeof(glm::mat3x4));
                             transformMatrices.push_back(transformMatrix);
                         }
@@ -1571,7 +1566,7 @@ namespace MilkShake
                             VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress{};
                             VkDeviceOrHostAddressConstKHR transformBufferDeviceAddress{};
 
-                            vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(m_Model->GetVertexBuffer().buffer);// +primitive->firstVertex * sizeof(vkglTF::Vertex);
+                            vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(m_Model->GetVertexBuffer().buffer);
                             indexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(m_Model->GetIndexBuffer().buffer) + primitive.firstIndex * sizeof(uint32_t);
                             transformBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(m_RtTransformBuffer.buffer) + static_cast<uint32_t>(geometryNodes.size()) * sizeof(VkTransformMatrixKHR);
 
@@ -1602,6 +1597,7 @@ namespace MilkShake
                             geometryNode.vertexBufferDeviceAddress = vertexBufferDeviceAddress.deviceAddress;
                             geometryNode.indexBufferDeviceAddress = indexBufferDeviceAddress.deviceAddress;
                             // TODO: Fill Texture Index
+                            geometryNode.textureIndexBaseColor = 0;
                             // geometryNode.textureIndexBaseColor = primitive.material.baseColorTexture->index;
                             // geometryNode.textureIndexOcclusion = primitive.material.occlusionTexture ? primitive->material.occlusionTexture->index : -1;
                             // @todo: map material id to global texture array
@@ -1678,10 +1674,9 @@ namespace MilkShake
         }
         void VKRenderer::CreateTopLevelAccelerationStructure()
         {
-            // We flip the matrix [1][1] = -1.0f to accomodate for the glTF up vector
             VkTransformMatrixKHR transformMatrix = {
                 1.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, -1.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
                 0.0f, 0.0f, 1.0f, 0.0f 
             };
 
@@ -2045,6 +2040,23 @@ namespace MilkShake
             //updateUniformBuffers();
         }
 
+        void VKRenderer::UpdateRayTracingUniformBuffer()
+        {
+            
+            glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            glm::mat4 proj = glm::perspective(glm::radians(45.0f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height, 0.1f, 10.0f);
+            proj[1][1] *= -1;
+
+            uniformData.projInverse = glm::inverse(proj);
+            uniformData.viewInverse = glm::inverse(view);
+            // This value is used to accumulate multiple frames into the finale picture
+            // It's required as ray tracing needs to do multiple passes for transparency
+            // In this sample we use noise offset by this frame index to shoot rays for transparency into different directions
+            // Once enough frames with random ray directions have been accumulated, it looks like proper transparency
+            uniformData.frame++;
+            memcpy(m_RtUniformBuffer.mapped, &uniformData, sizeof(uniformData));
+        }
+
         uint64_t VKRenderer::GetBufferDeviceAddress(VkBuffer buffer)
         {
             VkBufferDeviceAddressInfoKHR bufferDeviceAI{};
@@ -2064,6 +2076,18 @@ namespace MilkShake
 
         void VKRenderer::CreateStorageImage()
         {
+            // Release resources if image is to be recreated
+            if (m_StorageImage != VK_NULL_HANDLE) 
+            {
+                vkDestroyImageView(m_Device, m_StorageImageView, nullptr);
+                vkDestroyImage(m_Device, m_StorageImage, nullptr);
+                vkFreeMemory(m_Device, m_StorageImageMemory, nullptr);
+
+                m_StorageImage = VK_NULL_HANDLE;
+                m_StorageImageView = VK_NULL_HANDLE;
+                m_StorageImageMemory = VK_NULL_HANDLE;
+            }
+
             CreateImage(m_SwapChainExtent.width, m_SwapChainExtent.height,
                 m_SwapChainImageFormat,
                 VK_IMAGE_TILING_OPTIMAL,
@@ -2080,6 +2104,21 @@ namespace MilkShake
             vkDestroyImageView(m_Device, m_StorageImageView, nullptr);
             vkDestroyImage(m_Device, m_StorageImage, nullptr);
             vkFreeMemory(m_Device, m_StorageImageMemory, nullptr);
+        }
+        void VKRenderer::ReCreateStorageImage()
+        {
+            CreateStorageImage();
+
+            VkDescriptorImageInfo storageImageDescriptor{ VK_NULL_HANDLE, m_StorageImageView, VK_IMAGE_LAYOUT_GENERAL };
+            VkWriteDescriptorSet resultImageWrite{};
+            resultImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            resultImageWrite.dstSet = m_RtDescriptorSet;
+            resultImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            resultImageWrite.dstBinding = 1;
+            resultImageWrite.pImageInfo = &storageImageDescriptor;
+            resultImageWrite.descriptorCount = 1;
+
+            vkUpdateDescriptorSets(m_Device, 1, &resultImageWrite, 0, VK_NULL_HANDLE);
         }
 	}
 }

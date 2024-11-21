@@ -139,6 +139,10 @@ copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mtd.dll" "$(OutD
       <AdditionalLibraryDirectories>$(SolutionDir)External Libraries\GLFW\lib-vc2022;$(SolutionDir)External Libraries\assimp\lib64;$(SolutionDir)External Libraries\vulkan\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;shaderc_combined.lib;assimp-vc142-mt.lib;glfw3.lib;User32.lib;Gdi32.lib;Shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>
+copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mt.dll" "$(OutDir)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="External Libraries\stb\stb_image.cpp" />
@@ -150,6 +154,7 @@ copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mtd.dll" "$(OutD
     <ClCompile Include="src\Renderer\VKRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="assets\shaders\shared_structs.h" />
     <ClInclude Include="External Libraries\stb\stb_image.h" />
     <ClInclude Include="src\Math\AssimpGLMHelpers.h" />
     <ClInclude Include="src\Renderer\Buffer.h" />

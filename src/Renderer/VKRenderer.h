@@ -334,15 +334,20 @@ namespace MilkShake
                 uint32_t m_RtIndexCount{ 0 };
                 Buffer m_RtTransformBuffer;
 
-                UniformBufferObject uniformData;
+                struct UniformData
+                {
+                    glm::mat4 viewInverse;
+                    glm::mat4 projInverse;
+                    uint32_t frame{ 0 };
+                } uniformData;
                 Buffer m_RtUniformBuffer;
 
                 struct GeometryNode 
                 {
                     uint64_t vertexBufferDeviceAddress;
                     uint64_t indexBufferDeviceAddress;
-                    int32_t textureIndexBaseColor;
-                    int32_t textureIndexOcclusion;
+                    int32_t textureIndexBaseColor = -1;
+                    int32_t textureIndexOcclusion = -1;
                 };
                 Buffer m_GeometryNodesBuffer;
 
@@ -394,12 +399,15 @@ namespace MilkShake
                 void CreateRayTracingDescriptorSets();
                 void CreateRayTracingUniformBuffer();
 
+                void UpdateRayTracingUniformBuffer();
+
                 // Gets the device address from a buffer that's required for some of the buffers used for ray tracing
                 uint64_t GetBufferDeviceAddress(VkBuffer buffer);
                 VkStridedDeviceAddressRegionKHR GetSbtEntryStridedDeviceAddressRegion(VkBuffer buffer, uint32_t handleCount);
 
                 void CreateStorageImage();
                 void DestroyStorageImage();
+                void ReCreateStorageImage();
         };
     }
 }

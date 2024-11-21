@@ -26,7 +26,6 @@ namespace MilkShake
 		{
 			glm::vec3 position;
 			glm::vec3 normal;
-			glm::vec3 color;
 			glm::vec2 texCoord;
 		};
 
@@ -57,6 +56,18 @@ namespace MilkShake
 							delete child;
 						}
 					}
+
+					glm::mat4 GetWorldMatrix()
+					{
+						glm::mat4 ret = matrix;
+						Node* currentParent = parent;
+						while (currentParent)
+						{
+							ret = ret * currentParent->matrix;
+							currentParent = currentParent->parent;
+						}
+						return ret;
+					}
 				};
 
 			public:
@@ -83,6 +94,8 @@ namespace MilkShake
 				std::vector<VertexObject> m_Vertices;
 				std::vector<uint32_t> m_Indices;
 				std::vector<Texture*> m_Textures;
+
+				std::map<std::filesystem::path, bool> m_TextureMap;
 
 				std::vector<Node*> m_Nodes;
 				std::vector<Node*> m_LinearNodes;

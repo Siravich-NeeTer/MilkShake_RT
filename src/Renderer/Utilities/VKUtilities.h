@@ -69,6 +69,7 @@ namespace MilkShake
 			void CreateImage(const VKRenderer& _vkRenderer, uint32_t _width, uint32_t _height, VkFormat _format, VkImageTiling _tiling, VkImageUsageFlags _usage, VkMemoryPropertyFlags _properties, VkImage& _image, VkDeviceMemory& _imageMemory);
 			void CopyBufferToImage(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, VkBuffer _buffer, VkImage _image, uint32_t _width, uint32_t _height);
 			void TransitionImageLayout(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, VkImage _image, VkFormat _format, VkImageLayout _oldLayout, VkImageLayout _newLayout);
+			void TransitionImageLayout(const VKRenderer& _vkRenderer, const VkCommandBuffer& _commandBuffer, VkImage _image, VkFormat _format, VkImageLayout _oldLayout, VkImageLayout _newLayout);
 
 			VkFormat FindSupportedFormat(const VKRenderer& _vkRenderer, const std::vector<VkFormat>& _formats, VkImageTiling _tiling, VkFormatFeatureFlags _features);
 			VkFormat FindDepthFormat(const VKRenderer& _vkRenderer);
