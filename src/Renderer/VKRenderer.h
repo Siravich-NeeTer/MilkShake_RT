@@ -25,6 +25,7 @@
 #include <set>
 
 #include "Model.h"
+#include "Camera.h"
 
 #include "Utilities/VKUtilities.h"
 #include "Utilities/VKValidation.h"
@@ -62,9 +63,9 @@ namespace MilkShake
         };
 
         #ifdef NDEBUG
-                const bool enableValidationLayers = false;
+            const bool enableValidationLayers = false;
         #else
-                const bool enableValidationLayers = true;
+            const bool enableValidationLayers = true;
         #endif
 
         struct QueueFamilyIndices
@@ -89,7 +90,7 @@ namespace MilkShake
         {
             glm::vec3 pos;
             glm::vec3 color;
-            glm::vec2 texCoord;
+            glm::vec2 uv;
 
             static VkVertexInputBindingDescription getBindingDescription()
             {
@@ -118,7 +119,7 @@ namespace MilkShake
                 attributeDescriptions[2].binding = 0;
                 attributeDescriptions[2].location = 2;
                 attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-                attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
+                attributeDescriptions[2].offset = offsetof(Vertex, uv);
 
                 return attributeDescriptions;
             }
@@ -294,8 +295,23 @@ namespace MilkShake
                 VkQueue GetGraphicsQueue() const { return m_GraphicsQueue; }
 
             // Loading Model & Texture Stuff
+            public:
+                int LoadModel(const std::filesystem::path& _filePath);
+                int LoadTexture(const std::filesystem::path& _filePath);
+                int CreateMaterial(Material _material);
+
             private:
+                // TODO: Deal with m_ModelsMap
+                std::map<std::filesystem::path, Model*> m_ModelsMap;
+
+                std::vector<Texture*> m_Textures;
+                std::map<std::filesystem::path, Texture*> m_TexturesMap;
+
+                std::map<int, Material> m_MaterialsMap;
+
                 Model* m_Model;
+                Camera m_Camera;
+                bool isCameraMove;
 
             // Acceleration Structures + Ray-Tracing
             private:

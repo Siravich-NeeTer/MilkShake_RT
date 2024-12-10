@@ -10,7 +10,7 @@
 
 #include "shared_structs.h"
 
-layout(location = 4) rayPayloadInEXT RayPayload payload;
+layout(location = 0) rayPayloadInEXT RayPayload payload;
 
 void main()
 {

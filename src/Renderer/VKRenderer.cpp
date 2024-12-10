@@ -13,6 +13,11 @@ namespace MilkShake
             m_Window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
             glfwSetWindowUserPointer(m_Window, this);
             glfwSetFramebufferSizeCallback(m_Window, FramebufferResizeCallback);
+
+            glfwSetKeyCallback(m_Window, Input::KeyCallBack);
+            glfwSetCursorPosCallback(m_Window, Input::CursorCallBack);
+            glfwSetMouseButtonCallback(m_Window, Input::MouseCallBack);
+            glfwSetScrollCallback(m_Window, Input::ScrollCallback);
         }
         void VKRenderer::InitVulkan()
         {
@@ -45,23 +50,64 @@ namespace MilkShake
 
             CreateCommandBuffers();
             CreateSyncObjects();
-
-            m_Model = new Model();
+            
+            m_Model = new Model(0, "Hello");
             m_Model->LoadModel(*this, m_CommandPool, "assets/models/FlightHelmet.gltf");
+
             InitRayTracing();
         }
         void VKRenderer::MainLoop()
         {
+            m_Camera = Camera({ 0.0f, 0.0f, 1.0f });
+
+            float prevTime = 0.0f;
             while (!glfwWindowShouldClose(m_Window))
             {
+                float currentTime = glfwGetTime();
+                float dt = currentTime - prevTime;
+
                 glfwPollEvents();
+
+
+                if (Input::IsKeyBeginPressed(GLFW_MOUSE_BUTTON_RIGHT))
+                {
+                    m_Camera.ResetMousePosition();
+                    isCameraMove = true;
+                    glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                }
+                else if (Input::IsKeyEndPressed(GLFW_MOUSE_BUTTON_RIGHT))
+                {
+                    isCameraMove = false;
+                    glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                }
+
+                if (Input::scroll > 0.0f || Input::scroll < 0.0f)
+                {
+                    m_Camera.MoveAlongZ(Input::scroll);
+                }
+
+                if (isCameraMove)
+                {
+                    m_Camera.ProcessMousesMovement();
+                    m_Camera.Input(dt);
+
+                    uniformData.frame = 0;
+                }
+
                 DrawFrame();
+                Input::EndFrame();
+                prevTime = currentTime;
             }
 
             vkDeviceWaitIdle(m_Device);
         }
         void VKRenderer::Cleanup()
         {
+            for (auto& texture : m_Textures)
+            {
+                delete texture;
+            }
+
             CleanRayTracing();
             for (auto& shaderModule : m_ShaderModules)
             {
@@ -1049,7 +1095,7 @@ namespace MilkShake
 
             UniformBufferObject ubo{};
             ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-            ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+            ubo.view = m_Camera.GetViewMatrix();
             ubo.proj = glm::perspective(glm::radians(45.0f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height, 0.1f, 10.0f);
             ubo.proj[1][1] *= -1;
 
@@ -1340,9 +1386,31 @@ namespace MilkShake
         // --------------------------------------------------------------------------------------------------------------------------
         //                                                     Load Model Stuff
         // --------------------------------------------------------------------------------------------------------------------------
+        int VKRenderer::LoadModel(const std::filesystem::path& _filePath)
+        {
+            return -1;
+        }
+        int VKRenderer::LoadTexture(const std::filesystem::path& _filePath)
+        {
+            auto targetTexture = m_TexturesMap.find(_filePath);
+            if (targetTexture != m_TexturesMap.end())
+                return targetTexture->second->GetAssetID();
 
-        
-        
+            int id = m_TexturesMap.size();
+            std::cout << "LOAD : " << _filePath << "\n";
+
+            Texture* newTexture = new Texture(*this, m_CommandPool, _filePath, id, "");
+            m_Textures.push_back(newTexture);
+            m_TexturesMap[_filePath] = newTexture;
+
+            return id;
+        }
+        int VKRenderer::CreateMaterial(Material _material)
+        {
+            int id = m_MaterialsMap.size();
+            m_MaterialsMap[id] = _material;
+            return id;
+        }
 
         // --------------------------------------------------------------------------------------------------------------------------
         //                                                     Ray Tracing Stuff
@@ -1596,11 +1664,11 @@ namespace MilkShake
                             GeometryNode geometryNode{};
                             geometryNode.vertexBufferDeviceAddress = vertexBufferDeviceAddress.deviceAddress;
                             geometryNode.indexBufferDeviceAddress = indexBufferDeviceAddress.deviceAddress;
-                            // TODO: Fill Texture Index
-                            geometryNode.textureIndexBaseColor = 0;
-                            // geometryNode.textureIndexBaseColor = primitive.material.baseColorTexture->index;
-                            // geometryNode.textureIndexOcclusion = primitive.material.occlusionTexture ? primitive->material.occlusionTexture->index : -1;
-                            // @todo: map material id to global texture array
+
+                            Material material = m_MaterialsMap[primitive.materialIndex];
+                            geometryNode.textureIndexBaseColor = material.BaseColorTextureID;
+                            geometryNode.textureIndexOcclusion = material.OcclusionTextureID;
+
                             geometryNodes.push_back(geometryNode);
                         }
                     }
@@ -1813,7 +1881,7 @@ namespace MilkShake
         void VKRenderer::CreateRayTracingPipeline()
         {
             // [DONE] TODO: Added TextureCount on model
-            uint32_t imageCount = static_cast<uint32_t>(m_Model->GetTextures().size());
+            uint32_t imageCount = static_cast<uint32_t>(m_Textures.size());
 
             std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings =
             {
@@ -1924,7 +1992,7 @@ namespace MilkShake
         void VKRenderer::CreateRayTracingDescriptorSets()
         {
             // [DONE] TODO: Load Texture
-            uint32_t imageCount = static_cast<uint32_t>(m_Model->GetTextures().size());
+            uint32_t imageCount = static_cast<uint32_t>(m_Textures.size());
             std::vector<VkDescriptorPoolSize> poolSizes = {
                 { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1 },
                 { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 },
@@ -2006,7 +2074,7 @@ namespace MilkShake
             // Image descriptors for the image array
             std::vector<VkDescriptorImageInfo> textureDescriptors{};
             // [DONE] TODO: Load Model Texture
-            for (auto& texture : m_Model->GetTextures()) {
+            for (auto& texture : m_Textures) {
                 VkDescriptorImageInfo descriptor{};
                 descriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 descriptor.sampler = texture->GetSampler();
@@ -2043,7 +2111,7 @@ namespace MilkShake
         void VKRenderer::UpdateRayTracingUniformBuffer()
         {
             
-            glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            glm::mat4 view = m_Camera.GetViewMatrix();
             glm::mat4 proj = glm::perspective(glm::radians(45.0f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height, 0.1f, 10.0f);
             proj[1][1] *= -1;
 

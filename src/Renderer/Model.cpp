@@ -3,6 +3,8 @@
 #include "Math/AssimpGLMHelpers.h"
 #include "Utilities/VKUtilities.h"
 
+#include "VKRenderer.h"
+
 namespace MilkShake
 {
 	namespace Graphics
@@ -14,17 +16,16 @@ namespace MilkShake
 			return (std::string::npos == pos ? "" : _path.string().substr(0, pos + 1));
 		}
 
+		Model::Model(int _id, std::string _name)
+			: IAsset(_id, _name)
+		{
+		}
 		Model::~Model()
 		{
-			for (auto& texture : m_Textures)
-			{
-				delete texture;
-			}
-
 			m_VertexBuffer.Destroy();
 			m_IndexBuffer.Destroy();
 		}
-		void Model::LoadModel(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, const std::filesystem::path& _filePath)
+		void Model::LoadModel(VKRenderer& _vkRenderer, VkCommandPool& _commandPool, const std::filesystem::path& _filePath)
 		{
 			Assimp::Importer importer;
 			const aiScene* scene = importer.ReadFile(_filePath.string(),
@@ -45,29 +46,39 @@ namespace MilkShake
 			// Get Materials of Model
 			for (size_t i = 0; i < scene->mNumMaterials; i++)
 			{
-				aiMaterial* material = scene->mMaterials[i];
+				aiMaterial* ai_material = scene->mMaterials[i];
+				Material material;
+
+				// TODO: Remove support only BaseColor
+				//for (int materialType = 0; materialType < aiTextureType_SPECULAR; materialType++)
 				for (int materialType = 0; materialType < AI_TEXTURE_TYPE_MAX; materialType++)
 				{
-					if (material->GetTextureCount(static_cast<aiTextureType>(materialType)) > 0)
+					if (ai_material->GetTextureCount(static_cast<aiTextureType>(materialType)) > 0)
 					{
 						aiString aiTexturePath;
-						material->GetTexture(static_cast<aiTextureType>(materialType), 0, &aiTexturePath);
+						ai_material->GetTexture(static_cast<aiTextureType>(materialType), 0, &aiTexturePath);
 
 						std::filesystem::path texturePath = GetDirectory(_filePath) + aiTexturePath.C_Str();
 
-						if (m_TextureMap[texturePath])
-							continue;
+						int textureID = _vkRenderer.LoadTexture(texturePath);
 
-						std::cout << "LOAD : " << texturePath << "\n";
-						m_Textures.push_back(new Texture(_vkRenderer, _commandPool, texturePath));
-						m_TextureMap[texturePath] = true;
+						if (materialType == aiTextureType_DIFFUSE || materialType == aiTextureType_BASE_COLOR)
+							material.BaseColorTextureID = textureID;
+						else if (materialType == aiTextureType_NORMALS)
+							material.NormalTextureID = textureID;
+						else if (materialType == aiTextureType_LIGHTMAP || materialType == aiTextureType_AMBIENT_OCCLUSION)
+							material.OcclusionTextureID = textureID;
 					}
 				}
+
+				m_MaterialIDs.push_back(_vkRenderer.CreateMaterial(material));
 			}
 
 			// TODO: If Model doesn't have any Material
+			/*
 			if (m_Textures.empty())
 				m_Textures.push_back(new Texture(_vkRenderer, _commandPool, "assets/models/viking_room.png"));
+			*/
 
 			ProcessNode(scene->mRootNode, scene, nullptr);
 
@@ -131,16 +142,16 @@ namespace MilkShake
 					glm::vec2 vec;
 					vec.x = _mesh->mTextureCoords[0][i].x;
 					vec.y = _mesh->mTextureCoords[0][i].y;
-					vertex.texCoord = vec;
+					vertex.uv = vec;
 				}
 				else
 				{
-					vertex.texCoord = glm::vec2(0.0f, 0.0f);
+					vertex.uv = glm::vec2(0.0f, 0.0f);
 				}
 
 				m_Vertices.push_back(vertex);
 			}
-			primitive.materialIndex = _mesh->mMaterialIndex;
+			primitive.materialIndex = m_MaterialIDs[_mesh->mMaterialIndex];
 
 			uint32_t indexCount = 0;
 			for (unsigned int i = 0; i < _mesh->mNumFaces; i++)

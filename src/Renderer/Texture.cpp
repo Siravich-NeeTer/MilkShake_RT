@@ -9,12 +9,14 @@ namespace MilkShake
 {
 	namespace Graphics
 	{
-		Texture::Texture(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool)
-			: m_VKRendererRef(_vkRenderer), m_CommandPoolRef(_commandPool)
+		Texture::Texture(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, int _id, std::string _name)
+			: m_VKRendererRef(_vkRenderer), m_CommandPoolRef(_commandPool),
+				IAsset(_id, _name)
 		{
 		}
-		Texture::Texture(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, const std::filesystem::path& _texturePath)
-			: m_VKRendererRef(_vkRenderer), m_CommandPoolRef(_commandPool)
+		Texture::Texture(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, const std::filesystem::path& _texturePath, int _id, std::string _name)
+			: m_VKRendererRef(_vkRenderer), m_CommandPoolRef(_commandPool),
+				IAsset(_id, _name)
 		{
 			CreateTextureImage(_texturePath);
 			CreateTextureImageView();

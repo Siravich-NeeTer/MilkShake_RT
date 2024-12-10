@@ -146,6 +146,8 @@ copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mt.dll" "$(OutDi
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="External Libraries\stb\stb_image.cpp" />
+    <ClCompile Include="src\Camera.cpp" />
+    <ClCompile Include="src\Input.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\Renderer\Buffer.cpp" />
     <ClCompile Include="src\Renderer\Model.cpp" />
@@ -156,8 +158,12 @@ copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mt.dll" "$(OutDi
   <ItemGroup>
     <ClInclude Include="assets\shaders\shared_structs.h" />
     <ClInclude Include="External Libraries\stb\stb_image.h" />
+    <ClInclude Include="src\Camera.h" />
+    <ClInclude Include="src\Input.h" />
     <ClInclude Include="src\Math\AssimpGLMHelpers.h" />
     <ClInclude Include="src\Renderer\Buffer.h" />
+    <ClInclude Include="src\Renderer\IAsset.h" />
+    <ClInclude Include="src\Renderer\Material.h" />
     <ClInclude Include="src\Renderer\Model.h" />
     <ClInclude Include="src\Renderer\Texture.h" />
     <ClInclude Include="src\Renderer\Utilities\AcclerationStructure.h" />

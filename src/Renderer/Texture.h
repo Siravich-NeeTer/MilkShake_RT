@@ -4,17 +4,19 @@
 
 #include <vulkan/vulkan.hpp>
 
+#include "IAsset.h"
+
 namespace MilkShake
 {
 	namespace Graphics
 	{
 		class VKRenderer;
 
-		class Texture
+		class Texture : public IAsset
 		{
 			public:
-				Texture(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool);
-				Texture(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, const std::filesystem::path& _texturePath);
+				Texture(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, int _id, std::string _name);
+				Texture(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, const std::filesystem::path& _texturePath, int _id, std::string _name);
 				~Texture();
 
 				void LoadTexture(const std::filesystem::path& _path);

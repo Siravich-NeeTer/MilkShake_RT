@@ -21,6 +21,7 @@ struct RayPayload
     int primitiveIndex; // Index of the hit triangle primitive within object
     vec3 bc;            // Barycentric coordinates of the hit point within triangle
     vec3 normal;        // TODO: Temp Data
+    vec3 color;
 };
 
 #endif // SHARED_STRUCTS

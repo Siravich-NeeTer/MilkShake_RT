@@ -15,6 +15,7 @@
 
 #include "Buffer.h"
 #include "Texture.h"
+#include "Material.h"
 
 namespace MilkShake
 {
@@ -26,10 +27,10 @@ namespace MilkShake
 		{
 			glm::vec3 position;
 			glm::vec3 normal;
-			glm::vec2 texCoord;
+			glm::vec2 uv;
 		};
 
-		class Model
+		class Model : public IAsset
 		{
 			private:
 				struct Primitive
@@ -71,13 +72,14 @@ namespace MilkShake
 				};
 
 			public:
-				Model() = default;
+				Model(int _id, std::string _name);
 				~Model();
-				void LoadModel(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, const std::filesystem::path& _filePath);
+				void LoadModel(VKRenderer& _vkRenderer, VkCommandPool& _commandPool, const std::filesystem::path& _filePath);
 
 				const std::vector<VertexObject>& GetVertices() const { return m_Vertices; }
 				const std::vector<uint32_t>& GetIndices() const { return m_Indices; }
-				const std::vector<Texture*>& GetTextures() const { return m_Textures; }
+				//const std::vector<Texture*>& GetTextures() const { return m_Textures; }
+				const std::vector<int>& GetMaterialIDs() const { return m_MaterialIDs; }
 				const std::vector<Node*>& GetNode() const { return m_Nodes; }
 				const std::vector<Node*>& GetLinearNode() const { return m_LinearNodes; }
 				const Buffer& GetVertexBuffer() const { return m_VertexBuffer; }
@@ -93,9 +95,7 @@ namespace MilkShake
 				Buffer m_IndexBuffer;
 				std::vector<VertexObject> m_Vertices;
 				std::vector<uint32_t> m_Indices;
-				std::vector<Texture*> m_Textures;
-
-				std::map<std::filesystem::path, bool> m_TextureMap;
+				std::vector<int> m_MaterialIDs;
 
 				std::vector<Node*> m_Nodes;
 				std::vector<Node*> m_LinearNodes;

@@ -10,18 +10,17 @@
 
 #include "shared_structs.h"
 
-layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
-layout(binding = 1, set = 0, rgba8) uniform image2D image;
-layout(binding = 2, set = 0) uniform CameraProperties 
+layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
+layout(set = 0, binding = 1, rgba8) uniform image2D image;
+layout(set = 0, binding = 2) uniform CameraProperties 
 {
 	mat4 viewInverse;
 	mat4 projInverse;
 	uint frame;
 } cam;
 
-layout(location = 0) rayPayloadEXT vec3 hitValue;
+layout(location = 0) rayPayloadEXT RayPayload payload;
 layout(location = 3) rayPayloadEXT uint payloadSeed;
-layout(location = 4) rayPayloadEXT RayPayload payload;
 
 #include "random.glsl"
 
@@ -50,14 +49,13 @@ void main()
 	float tmin = 0.001;
 	float tmax = 10000.0;
 
-    hitValue = vec3(0.0);
-	vec3 hitValues = vec3(0);
+	vec3 hitValues = vec3(0.0f);
 
 	const int samples = 1;
 
 	payloadSeed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, cam.frame);
 	traceRayEXT(topLevelAS, 
-		gl_RayFlagsOpaqueEXT,
+		gl_RayFlagsNoneEXT,
 		0xff, 
 		0, 
 		0, 
@@ -66,7 +64,7 @@ void main()
 		tmin, 
 		direction.xyz, 
 		tmax, 
-		4);			// layout(location = 4) RayPayload
+		0);			// layout(location = 0) RayPayload
 
 	// imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(hitValues / float(samples), 0.0));
 
@@ -74,7 +72,7 @@ void main()
 	vec3 hitVal = hitValues / float(samples);
 	if(payload.hit)
 	{
-		hitVal = abs(payload.normal);
+		hitVal = payload.color;
 	}
 
 	if(cam.frame > 0)

@@ -15,7 +15,7 @@
 
 #include "shared_structs.h"
 
-layout(location = 4) rayPayloadInEXT RayPayload payload;
+layout(location = 0) rayPayloadInEXT RayPayload payload;
 
 hitAttributeEXT vec2 bc;
 
@@ -50,5 +50,13 @@ void main()
     payload.hitDist = gl_HitTEXT;
 
 	Triangle tri = UnpackTriangle(gl_PrimitiveID, 48);
+	GeometryNode geometryNode = geometryNodes.nodes[gl_GeometryIndexEXT];
+    
     payload.normal = vec3(tri.normal);
+    payload.color = texture(textures[nonuniformEXT(geometryNode.textureIndexBaseColor)], tri.uv).rgb;
+    
+	if (geometryNode.textureIndexOcclusion > -1) {
+		float occlusion = texture(textures[nonuniformEXT(geometryNode.textureIndexOcclusion)], tri.uv).r;
+		payload.color *= occlusion;
+	}
 }
