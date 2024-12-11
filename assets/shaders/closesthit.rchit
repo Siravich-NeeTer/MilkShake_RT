@@ -43,19 +43,22 @@ void main()
     // about the hit point.
     payload.hit = true;
 
+    // gl_InstanceCustomIndexEXT will represent GeometryNodes Offset from SSBO
+
     payload.instanceIndex = gl_InstanceCustomIndexEXT;
     payload.primitiveIndex = gl_PrimitiveID;
     payload.bc = vec3(1.0-bc.x-bc.y, bc.x, bc.y);
     payload.hitPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
     payload.hitDist = gl_HitTEXT;
 
-	Triangle tri = UnpackTriangle(gl_PrimitiveID, 48);
-	GeometryNode geometryNode = geometryNodes.nodes[gl_GeometryIndexEXT];
-    
+	Triangle tri = UnpackTriangle(gl_PrimitiveID);
+	GeometryNode geometryNode = geometryNodes.nodes[gl_InstanceCustomIndexEXT + gl_GeometryIndexEXT];
+
     payload.normal = vec3(tri.normal);
     payload.color = texture(textures[nonuniformEXT(geometryNode.textureIndexBaseColor)], tri.uv).rgb;
     
-	if (geometryNode.textureIndexOcclusion > -1) {
+	if (geometryNode.textureIndexOcclusion > -1) 
+    {
 		float occlusion = texture(textures[nonuniformEXT(geometryNode.textureIndexOcclusion)], tri.uv).r;
 		payload.color *= occlusion;
 	}

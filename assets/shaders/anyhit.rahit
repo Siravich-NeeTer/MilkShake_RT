@@ -34,7 +34,7 @@ layout(binding = 5, set = 0) uniform sampler2D textures[];
 
 void main()
 {
-	Triangle tri = UnpackTriangle(gl_PrimitiveID, 112);
+	Triangle tri = UnpackTriangle(gl_PrimitiveID);
 	GeometryNode geometryNode = geometryNodes.nodes[gl_GeometryIndexEXT];
 	vec4 color = texture(textures[nonuniformEXT(geometryNode.textureIndexBaseColor)], tri.uv);
 	// If the alpha value of the texture at the current UV coordinates is below a given threshold, we'll ignore this intersection

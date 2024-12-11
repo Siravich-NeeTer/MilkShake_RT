@@ -70,10 +70,7 @@ void main()
 
 	// TODO: Display actual Color
 	vec3 hitVal = hitValues / float(samples);
-	if(payload.hit)
-	{
-		hitVal = payload.color;
-	}
+	hitVal = payload.color;
 
 	if(cam.frame > 0)
 	{

@@ -302,6 +302,7 @@ namespace MilkShake
 
             private:
                 // TODO: Deal with m_ModelsMap
+                std::vector<Model*> m_Models;
                 std::map<std::filesystem::path, Model*> m_ModelsMap;
 
                 std::vector<Texture*> m_Textures;
@@ -309,7 +310,6 @@ namespace MilkShake
 
                 std::map<int, Material> m_MaterialsMap;
 
-                Model* m_Model;
                 Camera m_Camera;
                 bool isCameraMove;
 
@@ -338,7 +338,7 @@ namespace MilkShake
                 VkDescriptorSet m_RtDescriptorSet;
                 VkDescriptorSetLayout m_RtDescriptorSetLayout;
 
-                AccelerationStructure m_BottomLevelAS{};
+                std::vector<AccelerationStructure> m_BottomLevelAS;
                 AccelerationStructure m_TopLevelAS{};
 
                 VkImage m_StorageImage;
@@ -348,7 +348,7 @@ namespace MilkShake
                 Buffer m_RtVertexBuffer;
                 Buffer m_RtIndexBuffer;
                 uint32_t m_RtIndexCount{ 0 };
-                Buffer m_RtTransformBuffer;
+                std::vector<Buffer> m_RtTransformBuffers;
 
                 struct UniformData
                 {
@@ -365,6 +365,8 @@ namespace MilkShake
                     int32_t textureIndexBaseColor = -1;
                     int32_t textureIndexOcclusion = -1;
                 };
+                std::vector<GeometryNode> m_GeometryNodes;
+                std::vector<int> m_BLAS_GeometryNodeOffsets;
                 Buffer m_GeometryNodesBuffer;
 
                 std::vector<VkRayTracingShaderGroupCreateInfoKHR> m_ShaderGroups{};
@@ -390,7 +392,7 @@ namespace MilkShake
                 void CreateAccelerationStructureBuffer(AccelerationStructure& accelerationStructure, VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo);
 
                 // Create the bottom level acceleration structure contains the scene's actual geometry (vertices, triangles)
-                void CreateBottomLevelAccelerationStructure();
+                AccelerationStructure CreateBottomLevelAccelerationStructure(Model* model);
                 // The top level acceleration structure contains the scene's object instances
                 void CreateTopLevelAccelerationStructure();
 

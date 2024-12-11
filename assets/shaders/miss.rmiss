@@ -14,5 +14,6 @@ layout(location = 0) rayPayloadInEXT RayPayload payload;
 
 void main()
 {
+    payload.color = vec3(0.7f);
     payload.hit = false;
 }

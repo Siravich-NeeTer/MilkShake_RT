@@ -51,8 +51,7 @@ namespace MilkShake
             CreateCommandBuffers();
             CreateSyncObjects();
             
-            m_Model = new Model(0, "Hello");
-            m_Model->LoadModel(*this, m_CommandPool, "assets/models/FlightHelmet.gltf");
+            LoadModel("assets/models/Sponza/Sponza.gltf");
 
             InitRayTracing();
         }
@@ -107,6 +106,10 @@ namespace MilkShake
             {
                 delete texture;
             }
+            for (auto& model : m_Models)
+            {
+                delete model;
+            }
 
             CleanRayTracing();
             for (auto& shaderModule : m_ShaderModules)
@@ -114,7 +117,6 @@ namespace MilkShake
                 vkDestroyShaderModule(m_Device, shaderModule, nullptr);
             }
             m_ShaderModules.clear();
-            delete m_Model;
 
             CleanupSwapChain();
 
@@ -1388,7 +1390,12 @@ namespace MilkShake
         // --------------------------------------------------------------------------------------------------------------------------
         int VKRenderer::LoadModel(const std::filesystem::path& _filePath)
         {
-            return -1;
+            int id = m_Models.size();
+            Model* newModel = new Model(id, "");
+            newModel->LoadModel(*this, m_CommandPool, _filePath);
+
+            m_Models.push_back(newModel);
+            return id;
         }
         int VKRenderer::LoadTexture(const std::filesystem::path& _filePath)
         {
@@ -1442,7 +1449,10 @@ namespace MilkShake
             vkGetRayTracingShaderGroupHandlesKHR = reinterpret_cast<PFN_vkGetRayTracingShaderGroupHandlesKHR>(vkGetDeviceProcAddr(m_Device, "vkGetRayTracingShaderGroupHandlesKHR"));
             vkCreateRayTracingPipelinesKHR = reinterpret_cast<PFN_vkCreateRayTracingPipelinesKHR>(vkGetDeviceProcAddr(m_Device, "vkCreateRayTracingPipelinesKHR"));
 
-            CreateBottomLevelAccelerationStructure();
+            for (Model* model : m_Models)
+            {
+                CreateBottomLevelAccelerationStructure(model);
+            }
             CreateTopLevelAccelerationStructure();
 
             CreateStorageImage();
@@ -1459,13 +1469,19 @@ namespace MilkShake
             vkDestroyDescriptorSetLayout(m_Device, m_RtDescriptorSetLayout, nullptr);
 
             DestroyStorageImage();
-            DeleteAccelerationStructure(m_BottomLevelAS);
+            for (auto& blas : m_BottomLevelAS)
+            {
+                DeleteAccelerationStructure(blas);
+            }
             DeleteAccelerationStructure(m_TopLevelAS);
 
 
             m_RtVertexBuffer.Destroy();
             m_RtIndexBuffer.Destroy();
-            m_RtTransformBuffer.Destroy();
+            for (auto& rtTransformBuffer : m_RtTransformBuffers)
+            {
+                rtTransformBuffer.Destroy();
+            }
 
             m_ShaderBindingTables.raygen.Destroy();
             m_ShaderBindingTables.miss.Destroy();
@@ -1588,10 +1604,14 @@ namespace MilkShake
             vkBindBufferMemory(m_Device, accelerationStructure.buffer, accelerationStructure.memory, 0);
         }
 
-        void VKRenderer::CreateBottomLevelAccelerationStructure()
+        AccelerationStructure VKRenderer::CreateBottomLevelAccelerationStructure(Model* model)
         {
+            AccelerationStructure blas;
+
+            m_BLAS_GeometryNodeOffsets.push_back(m_GeometryNodes.size());
+
             std::vector<VkTransformMatrixKHR> transformMatrices{};
-            for (auto node : m_Model->GetLinearNode())
+            for (auto node : model->GetLinearNode())
             {
                 if (!node->mesh.primitives.empty())
                 {
@@ -1608,11 +1628,13 @@ namespace MilkShake
                 }
             }
 
+            Buffer transformBuffer;
             Utility::CreateBuffer(*this,
                 VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                &m_RtTransformBuffer, static_cast<uint32_t>(transformMatrices.size()) * sizeof(VkTransformMatrixKHR),
+                &transformBuffer, static_cast<uint32_t>(transformMatrices.size()) * sizeof(VkTransformMatrixKHR),
                 transformMatrices.data());
+            m_RtTransformBuffers.push_back(transformBuffer);
 
             // Build
             // One geometry per glTF node, so we can index materials using gl_GeometryIndexEXT
@@ -1622,7 +1644,7 @@ namespace MilkShake
             std::vector<VkAccelerationStructureBuildRangeInfoKHR> buildRangeInfos{};
             std::vector<VkAccelerationStructureBuildRangeInfoKHR*> pBuildRangeInfos{};
             std::vector<GeometryNode> geometryNodes{};
-            for (auto node : m_Model->GetLinearNode())
+            for (auto node : model->GetLinearNode())
             {
                 if (!node->mesh.primitives.empty())
                 {
@@ -1634,9 +1656,9 @@ namespace MilkShake
                             VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress{};
                             VkDeviceOrHostAddressConstKHR transformBufferDeviceAddress{};
 
-                            vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(m_Model->GetVertexBuffer().buffer);
-                            indexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(m_Model->GetIndexBuffer().buffer) + primitive.firstIndex * sizeof(uint32_t);
-                            transformBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(m_RtTransformBuffer.buffer) + static_cast<uint32_t>(geometryNodes.size()) * sizeof(VkTransformMatrixKHR);
+                            vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(model->GetVertexBuffer().buffer);
+                            indexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(model->GetIndexBuffer().buffer) + primitive.firstIndex * sizeof(uint32_t);
+                            transformBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(transformBuffer.buffer) + static_cast<uint32_t>(geometryNodes.size()) * sizeof(VkTransformMatrixKHR);
 
                             VkAccelerationStructureGeometryKHR geometry{};
                             geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
@@ -1644,7 +1666,7 @@ namespace MilkShake
                             geometry.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
                             geometry.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
                             geometry.geometry.triangles.vertexData = vertexBufferDeviceAddress;
-                            geometry.geometry.triangles.maxVertex = m_Model->GetVertices().size();
+                            geometry.geometry.triangles.maxVertex = model->GetVertices().size();
                             //geometry.geometry.triangles.maxVertex = primitive->vertexCount;
                             geometry.geometry.triangles.vertexStride = sizeof(VertexObject);
                             geometry.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
@@ -1679,11 +1701,17 @@ namespace MilkShake
                 pBuildRangeInfos.push_back(&rangeInfo);
             }
 
+            // TODO: NOT SURE CORRECT WAY TO UPDATE BUFFER OR NOT?
+            m_GeometryNodes.insert(m_GeometryNodes.end(), geometryNodes.begin(), geometryNodes.end());
+            if (m_GeometryNodesBuffer.buffer != VK_NULL_HANDLE)
+            {
+                m_GeometryNodesBuffer.Destroy();
+            }
             Utility::CreateBuffer(*this,
                 VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                &m_GeometryNodesBuffer, static_cast<uint32_t>(geometryNodes.size()) * sizeof(GeometryNode),
-                geometryNodes.data());
+                &m_GeometryNodesBuffer, static_cast<uint32_t>(m_GeometryNodes.size()) * sizeof(GeometryNode),
+                m_GeometryNodes.data());
 
             // Get size info
             VkAccelerationStructureBuildGeometryInfoKHR accelerationStructureBuildGeometryInfo{};
@@ -1704,20 +1732,20 @@ namespace MilkShake
                 maxPrimitiveCounts.data(),
                 &accelerationStructureBuildSizesInfo);
 
-            CreateAccelerationStructureBuffer(m_BottomLevelAS, accelerationStructureBuildSizesInfo);
+            CreateAccelerationStructureBuffer(blas, accelerationStructureBuildSizesInfo);
 
             VkAccelerationStructureCreateInfoKHR accelerationStructureCreateInfo{};
             accelerationStructureCreateInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-            accelerationStructureCreateInfo.buffer = m_BottomLevelAS.buffer;
+            accelerationStructureCreateInfo.buffer = blas.buffer;
             accelerationStructureCreateInfo.size = accelerationStructureBuildSizesInfo.accelerationStructureSize;
             accelerationStructureCreateInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-            vkCreateAccelerationStructureKHR(m_Device, &accelerationStructureCreateInfo, nullptr, &m_BottomLevelAS.handle);
+            vkCreateAccelerationStructureKHR(m_Device, &accelerationStructureCreateInfo, nullptr, &blas.handle);
 
             // Create a small scratch buffer used during build of the bottom level acceleration structure
             ScratchBuffer scratchBuffer = CreateScratchBuffer(accelerationStructureBuildSizesInfo.buildScratchSize);
 
             accelerationStructureBuildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-            accelerationStructureBuildGeometryInfo.dstAccelerationStructure = m_BottomLevelAS.handle;
+            accelerationStructureBuildGeometryInfo.dstAccelerationStructure = blas.handle;
             accelerationStructureBuildGeometryInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
 
             const VkAccelerationStructureBuildRangeInfoKHR* buildOffsetInfo = buildRangeInfos.data();
@@ -1734,11 +1762,13 @@ namespace MilkShake
 
             VkAccelerationStructureDeviceAddressInfoKHR accelerationDeviceAddressInfo{};
             accelerationDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
-            accelerationDeviceAddressInfo.accelerationStructure = m_BottomLevelAS.handle;
-            m_BottomLevelAS.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(m_Device, &accelerationDeviceAddressInfo);
+            accelerationDeviceAddressInfo.accelerationStructure = blas.handle;
+            blas.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(m_Device, &accelerationDeviceAddressInfo);
 
             DeleteScratchBuffer(scratchBuffer);
 
+            m_BottomLevelAS.push_back(blas);
+            return blas;
         }
         void VKRenderer::CreateTopLevelAccelerationStructure()
         {
@@ -1748,22 +1778,26 @@ namespace MilkShake
                 0.0f, 0.0f, 1.0f, 0.0f 
             };
 
-            VkAccelerationStructureInstanceKHR instance{};
-            instance.transform = transformMatrix;
-            instance.instanceCustomIndex = 0;
-            instance.mask = 0xFF;
-            instance.instanceShaderBindingTableRecordOffset = 0;
-            instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-            instance.accelerationStructureReference = m_BottomLevelAS.deviceAddress;
+            size_t BLAS_Count = m_BottomLevelAS.size();
+            std::vector<VkAccelerationStructureInstanceKHR> instances(BLAS_Count);
+            for (size_t i = 0; i < BLAS_Count; i++)
+            {
+                instances[i].transform = transformMatrix;
+                instances[i].instanceCustomIndex = m_BLAS_GeometryNodeOffsets[i];
+                instances[i].mask = 0xFF;
+                instances[i].instanceShaderBindingTableRecordOffset = 0;
+                instances[i].flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+                instances[i].accelerationStructureReference = m_BottomLevelAS[i].deviceAddress;
+            }
 
+            Buffer instancesBuffer{};
             // Buffer for instance data
-            Buffer instancesBuffer;
             Utility::CreateBuffer(*this,
                 VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                 &instancesBuffer,
-                sizeof(VkAccelerationStructureInstanceKHR),
-                &instance);
+                BLAS_Count * sizeof(VkAccelerationStructureInstanceKHR),
+                instances.data());
 
             VkDeviceOrHostAddressConstKHR instanceDataDeviceAddress{};
             instanceDataDeviceAddress.deviceAddress = GetBufferDeviceAddress(instancesBuffer.buffer);
@@ -1787,7 +1821,7 @@ namespace MilkShake
             acclerationStructureBuildGeometryInfo.geometryCount = 1;
             acclerationStructureBuildGeometryInfo.pGeometries = &accelerationStructureGeometry;
 
-            uint32_t primitiveCount = 1;
+            uint32_t primitiveCount = BLAS_Count;
 
             VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo{};
             accelerationStructureBuildSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
@@ -1820,7 +1854,7 @@ namespace MilkShake
             accelerationBuildGeometryInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
 
             VkAccelerationStructureBuildRangeInfoKHR accelerationStructureBuildRangeInfo{};
-            accelerationStructureBuildRangeInfo.primitiveCount = 1;
+            accelerationStructureBuildRangeInfo.primitiveCount = BLAS_Count;
             accelerationStructureBuildRangeInfo.primitiveOffset = 0;
             accelerationStructureBuildRangeInfo.firstVertex = 0;
             accelerationStructureBuildRangeInfo.transformOffset = 0;

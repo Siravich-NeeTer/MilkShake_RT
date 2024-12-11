@@ -18,12 +18,12 @@ struct Triangle {
 };
 
 // This function will unpack our vertex buffer data into a single triangle and calculates uv coordinates
-Triangle UnpackTriangle(uint index, int vertexSize) 
+Triangle UnpackTriangle(uint index) 
 {
 	Triangle tri;
 	const uint triIndex = index * 3;
 
-	GeometryNode geometryNode = geometryNodes.nodes[gl_GeometryIndexEXT];
+	GeometryNode geometryNode = geometryNodes.nodes[gl_InstanceCustomIndexEXT + gl_GeometryIndexEXT];
 
 	Indices indices   = Indices(geometryNode.indexBufferDeviceAddress);
 	Vertices vertices = Vertices(geometryNode.vertexBufferDeviceAddress);
