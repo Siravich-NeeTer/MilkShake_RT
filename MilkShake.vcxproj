@@ -145,11 +145,23 @@ copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mt.dll" "$(OutDi
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="External Libraries\imgui\imgui.cpp" />
+    <ClCompile Include="External Libraries\imgui\imgui_demo.cpp" />
+    <ClCompile Include="External Libraries\imgui\imgui_draw.cpp" />
+    <ClCompile Include="External Libraries\imgui\imgui_impl_glfw.cpp" />
+    <ClCompile Include="External Libraries\imgui\imgui_impl_vulkan.cpp" />
+    <ClCompile Include="External Libraries\imgui\imgui_impl_win32.cpp" />
+    <ClCompile Include="External Libraries\imgui\imgui_tables.cpp" />
+    <ClCompile Include="External Libraries\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="External Libraries\imgui\implot.cpp" />
+    <ClCompile Include="External Libraries\imgui\implot_demo.cpp" />
+    <ClCompile Include="External Libraries\imgui\implot_items.cpp" />
     <ClCompile Include="External Libraries\stb\stb_image.cpp" />
     <ClCompile Include="src\Camera.cpp" />
     <ClCompile Include="src\Input.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\Renderer\Buffer.cpp" />
+    <ClCompile Include="src\Renderer\Descriptor.cpp" />
     <ClCompile Include="src\Renderer\Model.cpp" />
     <ClCompile Include="src\Renderer\Texture.cpp" />
     <ClCompile Include="src\Renderer\Utilities\VKUtilities.cpp" />
@@ -157,11 +169,24 @@ copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mt.dll" "$(OutDi
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="assets\shaders\shared_structs.h" />
+    <ClInclude Include="External Libraries\imgui\imconfig.h" />
+    <ClInclude Include="External Libraries\imgui\imgui.h" />
+    <ClInclude Include="External Libraries\imgui\imgui_extension.h" />
+    <ClInclude Include="External Libraries\imgui\imgui_impl_glfw.h" />
+    <ClInclude Include="External Libraries\imgui\imgui_impl_vulkan.h" />
+    <ClInclude Include="External Libraries\imgui\imgui_impl_win32.h" />
+    <ClInclude Include="External Libraries\imgui\imgui_internal.h" />
+    <ClInclude Include="External Libraries\imgui\implot.h" />
+    <ClInclude Include="External Libraries\imgui\implot_internal.h" />
+    <ClInclude Include="External Libraries\imgui\imstb_rectpack.h" />
+    <ClInclude Include="External Libraries\imgui\imstb_textedit.h" />
+    <ClInclude Include="External Libraries\imgui\imstb_truetype.h" />
     <ClInclude Include="External Libraries\stb\stb_image.h" />
     <ClInclude Include="src\Camera.h" />
     <ClInclude Include="src\Input.h" />
     <ClInclude Include="src\Math\AssimpGLMHelpers.h" />
     <ClInclude Include="src\Renderer\Buffer.h" />
+    <ClInclude Include="src\Renderer\Descriptor.h" />
     <ClInclude Include="src\Renderer\IAsset.h" />
     <ClInclude Include="src\Renderer\Material.h" />
     <ClInclude Include="src\Renderer\Model.h" />
@@ -178,7 +203,10 @@ copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mt.dll" "$(OutDi
     <None Include="assets\shaders\default.frag" />
     <None Include="assets\shaders\default.vert" />
     <None Include="assets\shaders\geometrytypes.glsl" />
+    <None Include="assets\shaders\material_utility.glsl" />
     <None Include="assets\shaders\miss.rmiss" />
+    <None Include="assets\shaders\post.frag" />
+    <None Include="assets\shaders\post.vert" />
     <None Include="assets\shaders\random.glsl" />
     <None Include="assets\shaders\raygen.rgen" />
     <None Include="assets\shaders\shadow.rmiss" />

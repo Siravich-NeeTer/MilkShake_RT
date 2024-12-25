@@ -32,21 +32,11 @@ namespace MilkShake
             CreateImageViews();
             CreateRenderPass();
             CreateDescriptorSetLayout();
-            CreateGraphicsPipeline();
+            // TODO: Already Create Ray-Tracing Pipeline
+            //CreateGraphicsPipeline();
             CreateCommandPool();
             CreateDepthResources();
             CreateFramebuffers();
-
-            CreateTextureImage();
-            CreateTextureImageView();
-            CreateTextureSampler();
-
-            CreateVertexBuffer();
-            CreateIndexBuffer();
-            CreateUniformBuffers();
-
-            CreateDescriptorPool();
-            CreateDescriptorSets();
 
             CreateCommandBuffers();
             CreateSyncObjects();
@@ -120,31 +110,11 @@ namespace MilkShake
 
             CleanupSwapChain();
 
-            vkDestroyPipeline(m_Device, m_GraphicsPipeline, nullptr);
-            vkDestroyPipelineLayout(m_Device, m_PipelineLayout, nullptr);
             vkDestroyRenderPass(m_Device, m_RenderPass, nullptr);
-
-            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-            {
-                vkDestroyBuffer(m_Device, m_UniformBuffers[i], nullptr);
-                vkFreeMemory(m_Device, m_UniformBuffersMemory[i], nullptr);
-            }
 
             vkDestroyDescriptorPool(m_Device, m_DescriptorPool, nullptr);
 
-            vkDestroySampler(m_Device, m_TextureSampler, nullptr);
-            vkDestroyImageView(m_Device, m_TextureImageView, nullptr);
-
-            vkDestroyImage(m_Device, m_TextureImage, nullptr);
-            vkFreeMemory(m_Device, m_TextureImageMemory, nullptr);
-
             vkDestroyDescriptorSetLayout(m_Device, m_DescriptorSetLayout, nullptr);
-
-            vkDestroyBuffer(m_Device, m_IndexBuffer, nullptr);
-            vkFreeMemory(m_Device, m_IndexBufferMemory, nullptr);
-
-            vkDestroyBuffer(m_Device, m_VertexBuffer, nullptr);
-            vkFreeMemory(m_Device, m_VertexBufferMemory, nullptr);
 
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
             {
@@ -553,132 +523,6 @@ namespace MilkShake
                 throw std::runtime_error("failed to create descriptor set layout!");
             }
         }
-        void VKRenderer::CreateGraphicsPipeline()
-        {
-            auto vertShaderCode = Shader::ReadFile("assets/shaders/default.vert");
-            auto fragShaderCode = Shader::ReadFile("assets/shaders/default.frag");
-
-            VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
-            VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
-
-            VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-            vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-            vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-            vertShaderStageInfo.module = vertShaderModule;
-            vertShaderStageInfo.pName = "main";
-
-            VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-            fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-            fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-            fragShaderStageInfo.module = fragShaderModule;
-            fragShaderStageInfo.pName = "main";
-
-            VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
-
-            VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-            vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-            auto bindingDescription = Vertex::getBindingDescription();
-            auto attributeDescriptions = Vertex::getAttributeDescriptions();
-
-            vertexInputInfo.vertexBindingDescriptionCount = 1;
-            vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-            vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-            vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
-
-            VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-            inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-            inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-            inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-            VkPipelineViewportStateCreateInfo viewportState{};
-            viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-            viewportState.viewportCount = 1;
-            viewportState.scissorCount = 1;
-
-            VkPipelineRasterizationStateCreateInfo rasterizer{};
-            rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-            rasterizer.depthClampEnable = VK_FALSE;
-            rasterizer.rasterizerDiscardEnable = VK_FALSE;
-            rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-            rasterizer.lineWidth = 1.0f;
-            rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-            rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-            rasterizer.depthBiasEnable = VK_FALSE;
-
-            VkPipelineMultisampleStateCreateInfo multisampling{};
-            multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-            multisampling.sampleShadingEnable = VK_FALSE;
-            multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-            VkPipelineDepthStencilStateCreateInfo depthStencil{};
-            depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-            depthStencil.depthTestEnable = VK_TRUE;
-            depthStencil.depthWriteEnable = VK_TRUE;
-            depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
-            depthStencil.depthBoundsTestEnable = VK_FALSE;
-            depthStencil.stencilTestEnable = VK_FALSE;
-
-            VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-            colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            colorBlendAttachment.blendEnable = VK_FALSE;
-
-            VkPipelineColorBlendStateCreateInfo colorBlending{};
-            colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-            colorBlending.logicOpEnable = VK_FALSE;
-            colorBlending.logicOp = VK_LOGIC_OP_COPY;
-            colorBlending.attachmentCount = 1;
-            colorBlending.pAttachments = &colorBlendAttachment;
-            colorBlending.blendConstants[0] = 0.0f;
-            colorBlending.blendConstants[1] = 0.0f;
-            colorBlending.blendConstants[2] = 0.0f;
-            colorBlending.blendConstants[3] = 0.0f;
-
-            std::vector<VkDynamicState> dynamicStates =
-            {
-                VK_DYNAMIC_STATE_VIEWPORT,
-                VK_DYNAMIC_STATE_SCISSOR
-            };
-            VkPipelineDynamicStateCreateInfo dynamicState{};
-            dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-            dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-            dynamicState.pDynamicStates = dynamicStates.data();
-
-            VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-            pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-            pipelineLayoutInfo.setLayoutCount = 1;
-            pipelineLayoutInfo.pSetLayouts = &m_DescriptorSetLayout;
-
-            if (vkCreatePipelineLayout(m_Device, &pipelineLayoutInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS)
-            {
-                throw std::runtime_error("failed to create pipeline layout!");
-            }
-
-            VkGraphicsPipelineCreateInfo pipelineInfo{};
-            pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-            pipelineInfo.stageCount = 2;
-            pipelineInfo.pStages = shaderStages;
-            pipelineInfo.pVertexInputState = &vertexInputInfo;
-            pipelineInfo.pInputAssemblyState = &inputAssembly;
-            pipelineInfo.pViewportState = &viewportState;
-            pipelineInfo.pRasterizationState = &rasterizer;
-            pipelineInfo.pMultisampleState = &multisampling;
-            pipelineInfo.pDepthStencilState = &depthStencil;
-            pipelineInfo.pColorBlendState = &colorBlending;
-            pipelineInfo.pDynamicState = &dynamicState;
-            pipelineInfo.layout = m_PipelineLayout;
-            pipelineInfo.renderPass = m_RenderPass;
-            pipelineInfo.subpass = 0;
-            pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-
-            if (vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_GraphicsPipeline) != VK_SUCCESS)
-            {
-                throw std::runtime_error("failed to create graphics pipeline!");
-            }
-
-            vkDestroyShaderModule(m_Device, fragShaderModule, nullptr);
-            vkDestroyShaderModule(m_Device, vertShaderModule, nullptr);
-        }
         void VKRenderer::CreateFramebuffers()
         {
             m_SwapChainFramebuffers.resize(m_SwapChainImageViews.size());
@@ -728,66 +572,6 @@ namespace MilkShake
             m_DepthImageView = CreateImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
         }
 
-        void VKRenderer::CreateTextureImage()
-        {
-            int texWidth, texHeight, texChannels;
-            stbi_uc* pixels = stbi_load("assets/textures/awesomeface.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-            VkDeviceSize imageSize = texWidth * texHeight * 4;
-
-            if (!pixels)
-            {
-                throw std::runtime_error("failed to load texture image!");
-            }
-
-            VkBuffer stagingBuffer;
-            VkDeviceMemory stagingBufferMemory;
-            CreateBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-            void* data;
-            vkMapMemory(m_Device, stagingBufferMemory, 0, imageSize, 0, &data);
-            memcpy(data, pixels, static_cast<size_t>(imageSize));
-            vkUnmapMemory(m_Device, stagingBufferMemory);
-
-            stbi_image_free(pixels);
-
-            CreateImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_TextureImage, m_TextureImageMemory);
-
-            Utility::TransitionImageLayout(*this, m_CommandPool, m_TextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            Utility::CopyBufferToImage(*this, m_CommandPool, stagingBuffer, m_TextureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-            Utility::TransitionImageLayout(*this, m_CommandPool, m_TextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-            vkDestroyBuffer(m_Device, stagingBuffer, nullptr);
-            vkFreeMemory(m_Device, stagingBufferMemory, nullptr);
-        }
-        void VKRenderer::CreateTextureImageView()
-        {
-            m_TextureImageView = CreateImageView(m_TextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
-        }
-        void VKRenderer::CreateTextureSampler()
-        {
-            VkPhysicalDeviceProperties properties{};
-            vkGetPhysicalDeviceProperties(m_PhysicalDevice, &properties);
-
-            VkSamplerCreateInfo samplerInfo{};
-            samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-            samplerInfo.magFilter = VK_FILTER_LINEAR;
-            samplerInfo.minFilter = VK_FILTER_LINEAR;
-            samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-            samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-            samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-            samplerInfo.anisotropyEnable = VK_TRUE;
-            samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
-            samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-            samplerInfo.unnormalizedCoordinates = VK_FALSE;
-            samplerInfo.compareEnable = VK_FALSE;
-            samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-            samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-
-            if (vkCreateSampler(m_Device, &samplerInfo, nullptr, &m_TextureSampler) != VK_SUCCESS)
-            {
-                throw std::runtime_error("failed to create texture sampler!");
-            }
-        }
         VkImageView VKRenderer::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
         {
             VkImageViewCreateInfo viewInfo{};
@@ -845,129 +629,6 @@ namespace MilkShake
             }
 
             vkBindImageMemory(m_Device, image, imageMemory, 0);
-        }
-
-        void VKRenderer::CreateVertexBuffer()
-        {
-            VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-
-            VkBuffer stagingBuffer;
-            VkDeviceMemory stagingBufferMemory;
-            CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-            void* data;
-            vkMapMemory(m_Device, stagingBufferMemory, 0, bufferSize, 0, &data);
-            memcpy(data, vertices.data(), (size_t)bufferSize);
-            vkUnmapMemory(m_Device, stagingBufferMemory);
-
-            CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_VertexBuffer, m_VertexBufferMemory);
-
-            Utility::CopyBuffer(*this, m_CommandPool, stagingBuffer, m_VertexBuffer, bufferSize);
-
-            vkDestroyBuffer(m_Device, stagingBuffer, nullptr);
-            vkFreeMemory(m_Device, stagingBufferMemory, nullptr);
-        }
-        void VKRenderer::CreateIndexBuffer()
-        {
-            VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
-
-            VkBuffer stagingBuffer;
-            VkDeviceMemory stagingBufferMemory;
-            CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-            void* data;
-            vkMapMemory(m_Device, stagingBufferMemory, 0, bufferSize, 0, &data);
-            memcpy(data, indices.data(), (size_t)bufferSize);
-            vkUnmapMemory(m_Device, stagingBufferMemory);
-
-            CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_IndexBuffer, m_IndexBufferMemory);
-
-            Utility::CopyBuffer(*this, m_CommandPool, stagingBuffer, m_IndexBuffer, bufferSize);
-
-            vkDestroyBuffer(m_Device, stagingBuffer, nullptr);
-            vkFreeMemory(m_Device, stagingBufferMemory, nullptr);
-        }
-        void VKRenderer::CreateUniformBuffers()
-        {
-            VkDeviceSize bufferSize = sizeof(UniformBufferObject);
-
-            m_UniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-            m_UniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-            m_UniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
-
-            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-            {
-                CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_UniformBuffers[i], m_UniformBuffersMemory[i]);
-
-                vkMapMemory(m_Device, m_UniformBuffersMemory[i], 0, bufferSize, 0, &m_UniformBuffersMapped[i]);
-            }
-        }
-        void VKRenderer::CreateDescriptorPool()
-        {
-            std::array<VkDescriptorPoolSize, 2> poolSizes{};
-            poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-            poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-            VkDescriptorPoolCreateInfo poolInfo{};
-            poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-            poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-            poolInfo.pPoolSizes = poolSizes.data();
-            poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-            if (vkCreateDescriptorPool(m_Device, &poolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
-            {
-                throw std::runtime_error("failed to create descriptor pool!");
-            }
-        }
-        void VKRenderer::CreateDescriptorSets()
-        {
-            std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, m_DescriptorSetLayout);
-            VkDescriptorSetAllocateInfo allocInfo{};
-            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-            allocInfo.descriptorPool = m_DescriptorPool;
-            allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-            allocInfo.pSetLayouts = layouts.data();
-
-            m_DescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-            if (vkAllocateDescriptorSets(m_Device, &allocInfo, m_DescriptorSets.data()) != VK_SUCCESS)
-            {
-                throw std::runtime_error("failed to allocate descriptor sets!");
-            }
-
-            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-            {
-                VkDescriptorBufferInfo bufferInfo{};
-                bufferInfo.buffer = m_UniformBuffers[i];
-                bufferInfo.offset = 0;
-                bufferInfo.range = sizeof(UniformBufferObject);
-
-                VkDescriptorImageInfo imageInfo{};
-                imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                imageInfo.imageView = m_TextureImageView;
-                imageInfo.sampler = m_TextureSampler;
-
-                std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
-
-                descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                descriptorWrites[0].dstSet = m_DescriptorSets[i];
-                descriptorWrites[0].dstBinding = 0;
-                descriptorWrites[0].dstArrayElement = 0;
-                descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                descriptorWrites[0].descriptorCount = 1;
-                descriptorWrites[0].pBufferInfo = &bufferInfo;
-
-                descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                descriptorWrites[1].dstSet = m_DescriptorSets[i];
-                descriptorWrites[1].dstBinding = 1;
-                descriptorWrites[1].dstArrayElement = 0;
-                descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-                descriptorWrites[1].descriptorCount = 1;
-                descriptorWrites[1].pImageInfo = &imageInfo;
-
-                vkUpdateDescriptorSets(m_Device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
-            }
         }
         void VKRenderer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
         {
@@ -1039,19 +700,16 @@ namespace MilkShake
 
         void VKRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
         {
-            VkCommandBufferBeginInfo beginInfo{};
-            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-            if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
-            {
-                throw std::runtime_error("failed to begin recording command buffer!");
-            }
-
             /*
                 Dispatch the ray tracing commands
             */
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RtPipeline);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RtPipelineLayout, 0, 1, &m_RtDescriptorSet, 0, 0);
+
+            PushConstantRay pcRay{};
+            pcRay.lightPosition = glm::vec3(0.0f, 3.0f, 0.0f);
+            pcRay.lightIntensity = 10.0f;
+            vkCmdPushConstants(commandBuffer, m_RtPipelineLayout, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 0, sizeof(PushConstantRay), &pcRay);
 
             VkStridedDeviceAddressRegionKHR emptySbtEntry = {};
             vkCmdTraceRaysKHR(
@@ -1065,9 +723,9 @@ namespace MilkShake
                 1);
 
             Utility::TransitionImageLayout(*this, commandBuffer,
-                m_SwapChainImages[imageIndex], VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            Utility::TransitionImageLayout(*this, commandBuffer,
                 m_StorageImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+            Utility::TransitionImageLayout(*this, commandBuffer,
+                m_SwapChainImages[imageIndex], VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
             VkImageCopy copyRegion{};
             copyRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
@@ -1078,30 +736,9 @@ namespace MilkShake
             vkCmdCopyImage(commandBuffer, m_StorageImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_SwapChainImages[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
             Utility::TransitionImageLayout(*this, commandBuffer,
-                m_SwapChainImages[imageIndex], VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-            Utility::TransitionImageLayout(*this, commandBuffer,
                 m_StorageImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-
-            if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
-            {
-                throw std::runtime_error("failed to record command buffer!");
-            }
-        }
-
-        void VKRenderer::UpdateUniformBuffer(uint32_t currentImage)
-        {
-            static auto startTime = std::chrono::high_resolution_clock::now();
-
-            auto currentTime = std::chrono::high_resolution_clock::now();
-            float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
-            UniformBufferObject ubo{};
-            ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-            ubo.view = m_Camera.GetViewMatrix();
-            ubo.proj = glm::perspective(glm::radians(45.0f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height, 0.1f, 10.0f);
-            ubo.proj[1][1] *= -1;
-
-            memcpy(m_UniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+            Utility::TransitionImageLayout(*this, commandBuffer,
+                m_SwapChainImages[imageIndex], VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
         }
 
         void VKRenderer::DrawFrame()
@@ -1126,9 +763,24 @@ namespace MilkShake
             UpdateRayTracingUniformBuffer();
 
             vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame]);
-
             vkResetCommandBuffer(m_CommandBuffers[m_CurrentFrame], VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
+
+            VkCommandBufferBeginInfo beginInfo{};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+            if (vkBeginCommandBuffer(m_CommandBuffers[m_CurrentFrame], &beginInfo) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to begin recording command buffer!");
+            }
+            
             RecordCommandBuffer(m_CommandBuffers[m_CurrentFrame], imageIndex);
+            //RenderImGui(imageIndex);
+
+            if (vkEndCommandBuffer(m_CommandBuffers[m_CurrentFrame]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to record command buffer!");
+            }
 
             VkSubmitInfo submitInfo{};
             submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1385,6 +1037,140 @@ namespace MilkShake
 
             return true;
         }
+
+        // --------------------------------------------------------------------------------------------------------------------------
+        //                                                     Post - Processing
+        // --------------------------------------------------------------------------------------------------------------------------
+        void VKRenderer::CreatePostDescriptor()
+        {
+            m_PostDescriptor.SetBindings(m_Device, {
+                    {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT}
+                });
+            //m_PostDescriptor.Write(m_Device, 0, m_scImageBuffer.Descriptor());
+        }
+        void VKRenderer::CreatePostPipeline()
+        {
+            auto vertShaderCode = Shader::ReadFile("assets/shaders/post.vert");
+            auto fragShaderCode = Shader::ReadFile("assets/shaders/post.frag");
+
+            VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
+            VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
+
+            VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+            vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+            vertShaderStageInfo.module = vertShaderModule;
+            vertShaderStageInfo.pName = "main";
+
+            VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+            fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+            fragShaderStageInfo.module = fragShaderModule;
+            fragShaderStageInfo.pName = "main";
+
+            VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+            VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+            vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+            vertexInputInfo.vertexBindingDescriptionCount = 0;
+            vertexInputInfo.pVertexBindingDescriptions = nullptr;
+            vertexInputInfo.vertexAttributeDescriptionCount = 0;
+            vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+
+            VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+            inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+            inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+            VkPipelineViewportStateCreateInfo viewportState{};
+            viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+            viewportState.viewportCount = 1;
+            viewportState.scissorCount = 1;
+
+            VkPipelineRasterizationStateCreateInfo rasterizer{};
+            rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+            rasterizer.depthClampEnable = VK_FALSE;
+            rasterizer.rasterizerDiscardEnable = VK_FALSE;
+            rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+            rasterizer.lineWidth = 1.0f;
+            rasterizer.cullMode = VK_CULL_MODE_NONE;
+            rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+            rasterizer.depthBiasEnable = VK_FALSE;
+
+            VkPipelineMultisampleStateCreateInfo multisampling{};
+            multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+            multisampling.sampleShadingEnable = VK_FALSE;
+            multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+            VkPipelineDepthStencilStateCreateInfo depthStencil{};
+            depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+            depthStencil.depthTestEnable = VK_TRUE;
+            depthStencil.depthWriteEnable = VK_TRUE;
+            depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL; // TODO: WHY LESS_OR_EQUAL
+            depthStencil.depthBoundsTestEnable = VK_FALSE;
+            depthStencil.stencilTestEnable = VK_FALSE;
+
+            VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+            colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+            colorBlendAttachment.blendEnable = VK_FALSE;
+
+            VkPipelineColorBlendStateCreateInfo colorBlending{};
+            colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+            colorBlending.logicOpEnable = VK_FALSE;
+            colorBlending.logicOp = VK_LOGIC_OP_COPY;
+            colorBlending.attachmentCount = 1;
+            colorBlending.pAttachments = &colorBlendAttachment;
+            colorBlending.blendConstants[0] = 0.0f;
+            colorBlending.blendConstants[1] = 0.0f;
+            colorBlending.blendConstants[2] = 0.0f;
+            colorBlending.blendConstants[3] = 0.0f;
+
+            std::vector<VkDynamicState> dynamicStates =
+            {
+                VK_DYNAMIC_STATE_VIEWPORT,
+                VK_DYNAMIC_STATE_SCISSOR
+            };
+            VkPipelineDynamicStateCreateInfo dynamicState{};
+            dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+            dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+            dynamicState.pDynamicStates = dynamicStates.data();
+
+            VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+            pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+            pipelineLayoutInfo.setLayoutCount = 1;
+            //pipelineLayoutInfo.pSetLayouts = &m_DescriptorSetLayout;
+
+            if (vkCreatePipelineLayout(m_Device, &pipelineLayoutInfo, nullptr, &m_PostPipelineLayout) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to create pipeline layout!");
+            }
+
+            VkGraphicsPipelineCreateInfo pipelineInfo{};
+            pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+            pipelineInfo.stageCount = 2;
+            pipelineInfo.pStages = shaderStages;
+            pipelineInfo.pVertexInputState = &vertexInputInfo;
+            pipelineInfo.pInputAssemblyState = &inputAssembly;
+            pipelineInfo.pViewportState = &viewportState;
+            pipelineInfo.pRasterizationState = &rasterizer;
+            pipelineInfo.pMultisampleState = &multisampling;
+            pipelineInfo.pDepthStencilState = &depthStencil;
+            pipelineInfo.pColorBlendState = &colorBlending;
+            pipelineInfo.pDynamicState = &dynamicState;
+            pipelineInfo.layout = m_PostPipelineLayout;
+            pipelineInfo.renderPass = m_PostRenderPass;
+            pipelineInfo.subpass = 0;
+            pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+
+            if (vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_PostPipeline) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to create graphics pipeline!");
+            }
+
+            vkDestroyShaderModule(m_Device, fragShaderModule, nullptr);
+            vkDestroyShaderModule(m_Device, vertShaderModule, nullptr);
+        }
+
         // --------------------------------------------------------------------------------------------------------------------------
         //                                                     Load Model Stuff
         // --------------------------------------------------------------------------------------------------------------------------
@@ -1955,10 +1741,17 @@ namespace MilkShake
             descriptorSetLayoutCreateInfo.pNext = &setLayoutBindingFlags;
             vkCreateDescriptorSetLayout(m_Device, &descriptorSetLayoutCreateInfo, nullptr, &m_RtDescriptorSetLayout);
 
+            VkPushConstantRange pushConstant{};
+            pushConstant.offset = 0;
+            pushConstant.size = sizeof(PushConstantRay);
+            pushConstant.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+
             VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
             pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
             pipelineLayoutCreateInfo.pSetLayouts = &m_RtDescriptorSetLayout;
             pipelineLayoutCreateInfo.setLayoutCount = 1;
+            pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstant;
+            pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
             vkCreatePipelineLayout(m_Device, &pipelineLayoutCreateInfo, nullptr, &m_RtPipelineLayout);
 
             /*
@@ -2221,6 +2014,88 @@ namespace MilkShake
             resultImageWrite.descriptorCount = 1;
 
             vkUpdateDescriptorSets(m_Device, 1, &resultImageWrite, 0, VK_NULL_HANDLE);
+        }
+
+        // --------------------------------------------------------------------------------------------------------------------------
+        //                                                     ImGui Stuff
+        // --------------------------------------------------------------------------------------------------------------------------
+        void VKRenderer::InitImGui()
+        {	
+            // Create Descriptor Pool for ImGui
+            VkDescriptorPoolSize pool_sizes[] =
+            {
+                { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+                { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+                { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+                { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+                { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+                { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+                { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+                { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+                { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
+            };
+
+            VkDescriptorPoolCreateInfo pool_info = {};
+            pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+            pool_info.maxSets = 1000;
+            pool_info.poolSizeCount = std::size(pool_sizes);
+            pool_info.pPoolSizes = pool_sizes;
+
+            VkDescriptorPool imguiPool;
+            vkCreateDescriptorPool(m_Device, &pool_info, nullptr, &imguiPool);
+
+            // Initialize ImGui library
+            ImGui::CreateContext();
+            ImGui_ImplGlfw_InitForVulkan(m_Window, true);
+
+            ImGui_ImplVulkan_InitInfo init_info = {};
+            init_info.Instance = m_Instance;
+            init_info.PhysicalDevice = m_PhysicalDevice;
+            init_info.Device = m_Device;
+            init_info.Queue = m_GraphicsQueue;
+            init_info.DescriptorPool = imguiPool;
+            init_info.RenderPass = m_RenderPass;
+            init_info.MinImageCount = 3;
+            init_info.ImageCount = 3;
+            init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+            ImGui_ImplVulkan_Init(&init_info);
+            ImGui_ImplVulkan_CreateFontsTexture();
+        }
+        void VKRenderer::RenderImGui(size_t imageIndex)
+        {
+            VkRenderPassBeginInfo renderPassInfo{};
+            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            renderPassInfo.renderPass = m_RenderPass;
+            renderPassInfo.framebuffer = m_SwapChainFramebuffers[imageIndex];
+            renderPassInfo.renderArea.offset = { 0, 0 };
+            renderPassInfo.renderArea.extent = m_SwapChainExtent;
+
+            std::array<VkClearValue, 2> clearValues{};
+            clearValues[0].color = { {1.0f, 1.0f, 1.0f, 1.0f} };
+            clearValues[1].depthStencil = { 1.0f, 0 };
+            
+            renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+            renderPassInfo.pClearValues = clearValues.data();
+
+            vkCmdBeginRenderPass(m_CommandBuffers[m_CurrentFrame], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+            // Render ImGui
+            ImGui_ImplVulkan_NewFrame();
+            ImGui_ImplGlfw_NewFrame();
+
+            ImGui::NewFrame();
+
+            ImGui::ShowDemoWindow();
+
+            ImGui::Render();
+            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), m_CommandBuffers[m_CurrentFrame]);
+
+            vkCmdEndRenderPass(m_CommandBuffers[m_CurrentFrame]);
+
         }
 	}
 }

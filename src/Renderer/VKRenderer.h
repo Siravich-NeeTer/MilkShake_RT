@@ -10,6 +10,10 @@
 
 #include <stb_image.h>
 
+#include <imgui/imgui.h>
+#include <imgui/imgui_impl_glfw.h>
+#include <imgui/imgui_impl_vulkan.h>
+
 #include <iostream>
 #include <fstream>
 #include <stdexcept>
@@ -26,6 +30,10 @@
 
 #include "Model.h"
 #include "Camera.h"
+
+#include "shaders/shared_structs.h"
+
+#include "Descriptor.h"
 
 #include "Utilities/VKUtilities.h"
 #include "Utilities/VKValidation.h"
@@ -86,69 +94,11 @@ namespace MilkShake
             std::vector<VkPresentModeKHR> presentModes;
         };
 
-        struct Vertex
-        {
-            glm::vec3 pos;
-            glm::vec3 color;
-            glm::vec2 uv;
-
-            static VkVertexInputBindingDescription getBindingDescription()
-            {
-                VkVertexInputBindingDescription bindingDescription{};
-                bindingDescription.binding = 0;
-                bindingDescription.stride = sizeof(Vertex);
-                bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-                return bindingDescription;
-            }
-
-            static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions()
-            {
-                std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
-
-                attributeDescriptions[0].binding = 0;
-                attributeDescriptions[0].location = 0;
-                attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-                attributeDescriptions[0].offset = offsetof(Vertex, pos);
-
-                attributeDescriptions[1].binding = 0;
-                attributeDescriptions[1].location = 1;
-                attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-                attributeDescriptions[1].offset = offsetof(Vertex, color);
-
-                attributeDescriptions[2].binding = 0;
-                attributeDescriptions[2].location = 2;
-                attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-                attributeDescriptions[2].offset = offsetof(Vertex, uv);
-
-                return attributeDescriptions;
-            }
-        };
-
         struct UniformBufferObject
         {
             alignas(16) glm::mat4 model;
             alignas(16) glm::mat4 view;
             alignas(16) glm::mat4 proj;
-        };
-
-        const std::vector<Vertex> vertices =
-        {
-            {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-            {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-            {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-            {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-
-            {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-            {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-            {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-            {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
-        };
-
-        const std::vector<uint16_t> indices =
-        {
-            0, 1, 2, 2, 3, 0,
-            4, 5, 6, 6, 7, 4
         };
 
         class VKRenderer
@@ -158,6 +108,7 @@ namespace MilkShake
                 {
                     InitWindow();
                     InitVulkan();
+                    InitImGui();
                     MainLoop();
                     Cleanup();
                 }
@@ -184,28 +135,12 @@ namespace MilkShake
 
                 VkRenderPass m_RenderPass;
                 VkDescriptorSetLayout m_DescriptorSetLayout;
-                VkPipelineLayout m_PipelineLayout;
-                VkPipeline m_GraphicsPipeline;
 
                 VkCommandPool m_CommandPool;
 
                 VkImage m_DepthImage;
                 VkDeviceMemory m_DepthImageMemory;
                 VkImageView m_DepthImageView;
-
-                VkImage m_TextureImage;
-                VkDeviceMemory m_TextureImageMemory;
-                VkImageView m_TextureImageView;
-                VkSampler m_TextureSampler;
-
-                VkBuffer m_VertexBuffer;
-                VkDeviceMemory m_VertexBufferMemory;
-                VkBuffer m_IndexBuffer;
-                VkDeviceMemory m_IndexBufferMemory;
-
-                std::vector<VkBuffer> m_UniformBuffers;
-                std::vector<VkDeviceMemory> m_UniformBuffersMemory;
-                std::vector<void*> m_UniformBuffersMapped;
 
                 VkDescriptorPool m_DescriptorPool;
                 std::vector<VkDescriptorSet> m_DescriptorSets;
@@ -240,22 +175,12 @@ namespace MilkShake
                 void CreateImageViews();
                 void CreateRenderPass();
                 void CreateDescriptorSetLayout();
-                void CreateGraphicsPipeline();
                 void CreateFramebuffers();
                 void CreateCommandPool();
                 void CreateDepthResources();
 
-                void CreateTextureImage();
-                void CreateTextureImageView();
-                void CreateTextureSampler();
                 VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
                 void CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
-
-                void CreateVertexBuffer();
-                void CreateIndexBuffer();
-                void CreateUniformBuffers();
-                void CreateDescriptorPool();
-                void CreateDescriptorSets();
                 void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
 
                 void CreateCommandBuffers();
@@ -264,7 +189,6 @@ namespace MilkShake
                 // - Helper Functions
                 // -- !!Renderer Loop Functions!!
                 void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
-                void UpdateUniformBuffer(uint32_t currentImage);
                 void DrawFrame();
                 // -- Shader Functions
                 VkShaderModule CreateShaderModule(const std::vector<uint32_t>& code);
@@ -293,6 +217,17 @@ namespace MilkShake
                 VkDevice GetDevice() const { return m_Device; }
                 VkPhysicalDevice GetPhysicalDevice() const { return m_PhysicalDevice; }
                 VkQueue GetGraphicsQueue() const { return m_GraphicsQueue; }
+
+            // Post-Process
+            private:
+                void CreatePostDescriptor();
+                void CreatePostPipeline();
+
+                VkPipelineLayout m_PostPipelineLayout;
+                VkPipeline m_PostPipeline;
+                VkRenderPass m_PostRenderPass;
+                Descriptor m_PostDescriptor;
+
 
             // Loading Model & Texture Stuff
             public:
@@ -426,6 +361,11 @@ namespace MilkShake
                 void CreateStorageImage();
                 void DestroyStorageImage();
                 void ReCreateStorageImage();
+            
+            // ImGui stuff
+            private:
+                void InitImGui();
+                void RenderImGui(size_t imageIndex);
         };
     }
 }

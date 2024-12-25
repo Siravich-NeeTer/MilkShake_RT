@@ -11,6 +11,18 @@ using mat4 = glm::mat4;
 using uint = unsigned int;
 #endif
 
+struct PushConstantRay
+{
+    vec3 lightPosition;
+    float lightIntensity;
+};
+
+struct LightComponent
+{
+    vec3 position;
+    float intensity;
+};
+
 struct RayPayload
 {
     uint seed;		// Used in Path Tracing step as random number seed
