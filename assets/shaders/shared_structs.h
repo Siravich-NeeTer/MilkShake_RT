@@ -36,4 +36,9 @@ struct RayPayload
     vec3 color;
 };
 
+struct PostProcessData
+{
+    vec2 screenSize;
+};
+
 #endif // SHARED_STRUCTS

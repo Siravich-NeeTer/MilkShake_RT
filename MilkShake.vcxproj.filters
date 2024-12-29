@@ -18,22 +18,22 @@
     <ClCompile Include="src\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\Renderer\Utilities\VKUtilities.cpp">
+    <ClCompile Include="src\Graphics\Utility\VulkanHelper.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\Renderer\VKRenderer.cpp">
+    <ClCompile Include="src\Graphics\VulkanRenderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="External Libraries\stb\stb_image.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\Renderer\Buffer.cpp">
+    <ClCompile Include="src\Graphics\Buffer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\Renderer\Model.cpp">
+    <ClCompile Include="src\Graphics\Model.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\Renderer\Texture.cpp">
+    <ClCompile Include="src\Graphics\Texture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\Camera.cpp">
@@ -75,33 +75,39 @@
     <ClCompile Include="External Libraries\imgui\imgui_draw.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\Renderer\Descriptor.cpp">
+    <ClCompile Include="src\Graphics\Descriptor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Core\MilkShakeEngine.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Graphics\Utility\Shader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\Renderer\Utilities\VKUtilities.h">
+    <ClInclude Include="src\Graphics\Utility\VulkanHelper.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\Renderer\Utilities\VKValidation.h">
+    <ClInclude Include="src\Graphics\Utility\VKValidation.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\Renderer\VKRenderer.h">
+    <ClInclude Include="src\Graphics\VulkanRenderer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="External Libraries\stb\stb_image.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\Renderer\Utilities\AcclerationStructure.h">
+    <ClInclude Include="src\Graphics\Utility\AcclerationStructure.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\Renderer\Buffer.h">
+    <ClInclude Include="src\Graphics\Buffer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\Renderer\Model.h">
+    <ClInclude Include="src\Graphics\Model.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\Renderer\Texture.h">
+    <ClInclude Include="src\Graphics\Texture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\Math\AssimpGLMHelpers.h">
@@ -116,10 +122,10 @@
     <ClInclude Include="src\Input.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\Renderer\IAsset.h">
+    <ClInclude Include="src\Graphics\IAsset.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\Renderer\Material.h">
+    <ClInclude Include="src\Graphics\Material.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="External Libraries\imgui\imgui.h">
@@ -158,7 +164,19 @@
     <ClInclude Include="External Libraries\imgui\imgui_extension.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\Renderer\Descriptor.h">
+    <ClInclude Include="src\Graphics\Descriptor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Core\MilkShakeEngine.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Graphics\ImageWrap.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Graphics\Utility\Shader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Graphics\Utility\GraphicsUtility.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

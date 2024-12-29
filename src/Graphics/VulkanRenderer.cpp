@@ -1,10 +1,10 @@
-#include "VKRenderer.h"
+#include "VulkanRenderer.h"
 
 namespace MilkShake
 {
 	namespace Graphics
 	{
-        void VKRenderer::InitWindow()
+        void VulkanRenderer::InitWindow()
         {
             glfwInit();
 
@@ -19,7 +19,7 @@ namespace MilkShake
             glfwSetMouseButtonCallback(m_Window, Input::MouseCallBack);
             glfwSetScrollCallback(m_Window, Input::ScrollCallback);
         }
-        void VKRenderer::InitVulkan()
+        void VulkanRenderer::InitVulkan()
         {
             CreateInstance();
             SetupValidationLayer();
@@ -31,12 +31,10 @@ namespace MilkShake
 
             CreateImageViews();
             CreateRenderPass();
-            CreateDescriptorSetLayout();
             // TODO: Already Create Ray-Tracing Pipeline
             //CreateGraphicsPipeline();
             CreateCommandPool();
             CreateDepthResources();
-            CreateFramebuffers();
 
             CreateCommandBuffers();
             CreateSyncObjects();
@@ -44,8 +42,15 @@ namespace MilkShake
             LoadModel("assets/models/Sponza/Sponza.gltf");
 
             InitRayTracing();
+
+            CreatePostUniformBuffer();
+            CreatePostDescriptor();
+            CreatePostRenderPass();
+            CreatePostPipeline();
+
+            CreateFramebuffers();
         }
-        void VKRenderer::MainLoop()
+        void VulkanRenderer::MainLoop()
         {
             m_Camera = Camera({ 0.0f, 0.0f, 1.0f });
 
@@ -90,7 +95,7 @@ namespace MilkShake
 
             vkDeviceWaitIdle(m_Device);
         }
-        void VKRenderer::Cleanup()
+        void VulkanRenderer::Cleanup()
         {
             for (auto& texture : m_Textures)
             {
@@ -100,7 +105,6 @@ namespace MilkShake
             {
                 delete model;
             }
-
             CleanRayTracing();
             for (auto& shaderModule : m_ShaderModules)
             {
@@ -109,12 +113,10 @@ namespace MilkShake
             m_ShaderModules.clear();
 
             CleanupSwapChain();
+            CleanupPostProcess();
+            CleanupImGui();
 
             vkDestroyRenderPass(m_Device, m_RenderPass, nullptr);
-
-            vkDestroyDescriptorPool(m_Device, m_DescriptorPool, nullptr);
-
-            vkDestroyDescriptorSetLayout(m_Device, m_DescriptorSetLayout, nullptr);
 
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
             {
@@ -140,7 +142,7 @@ namespace MilkShake
             glfwTerminate();
         }
 
-        void VKRenderer::CleanupSwapChain()
+        void VulkanRenderer::CleanupSwapChain()
         {
             vkDestroyImageView(m_Device, m_DepthImageView, nullptr);
             vkDestroyImage(m_Device, m_DepthImage, nullptr);
@@ -158,7 +160,7 @@ namespace MilkShake
 
             vkDestroySwapchainKHR(m_Device, m_SwapChain, nullptr);
         }
-        void VKRenderer::RecreateSwapChain()
+        void VulkanRenderer::RecreateSwapChain()
         {
             int width = 0, height = 0;
             glfwGetFramebufferSize(m_Window, &width, &height);
@@ -178,7 +180,7 @@ namespace MilkShake
             CreateFramebuffers();
         }
 
-        void VKRenderer::CreateInstance()
+        void VulkanRenderer::CreateInstance()
         {
             if (enableValidationLayers && !CheckValidationLayerSupport())
             {
@@ -232,7 +234,7 @@ namespace MilkShake
                 std::cout << "\n";
             #endif
         }
-        void VKRenderer::SetupValidationLayer()
+        void VulkanRenderer::SetupValidationLayer()
         {
             if (!enableValidationLayers) return;
 
@@ -244,14 +246,14 @@ namespace MilkShake
                 throw std::runtime_error("failed to set up debug messenger!");
             }
         }
-        void VKRenderer::CreateSurface()
+        void VulkanRenderer::CreateSurface()
         {
             if (glfwCreateWindowSurface(m_Instance, m_Window, nullptr, &m_Surface) != VK_SUCCESS)
             {
                 throw std::runtime_error("failed to create window surface!");
             }
         }
-        void VKRenderer::PickPhysicalDevice()
+        void VulkanRenderer::PickPhysicalDevice()
         {
             uint32_t deviceCount = 0;
             vkEnumeratePhysicalDevices(m_Instance, &deviceCount, nullptr);
@@ -293,7 +295,7 @@ namespace MilkShake
                 std::cout << "\n";
             #endif
         }
-        void VKRenderer::CreateLogicalDevice()
+        void VulkanRenderer::CreateLogicalDevice()
         {
             QueueFamilyIndices indices = FindQueueFamilies(m_PhysicalDevice);
 
@@ -372,7 +374,7 @@ namespace MilkShake
             vkGetDeviceQueue(m_Device, indices.graphicsFamily.value(), 0, &m_GraphicsQueue);
             vkGetDeviceQueue(m_Device, indices.presentFamily.value(), 0, &m_PresentQueue);
         }
-        void VKRenderer::CreateSwapChain()
+        void VulkanRenderer::CreateSwapChain()
         {
             SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(m_PhysicalDevice);
 
@@ -428,7 +430,7 @@ namespace MilkShake
             m_SwapChainImageFormat = surfaceFormat.format;
             m_SwapChainExtent = extent;
         }
-        void VKRenderer::CreateImageViews()
+        void VulkanRenderer::CreateImageViews()
         {
             m_SwapChainImageViews.resize(m_SwapChainImages.size());
 
@@ -437,7 +439,7 @@ namespace MilkShake
                 m_SwapChainImageViews[i] = CreateImageView(m_SwapChainImages[i], m_SwapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
             }
         }
-        void VKRenderer::CreateRenderPass()
+        void VulkanRenderer::CreateRenderPass()
         {
             VkAttachmentDescription colorAttachment{};
             colorAttachment.format = m_SwapChainImageFormat;
@@ -496,34 +498,7 @@ namespace MilkShake
                 throw std::runtime_error("failed to create render pass!");
             }
         }
-        void VKRenderer::CreateDescriptorSetLayout()
-        {
-            VkDescriptorSetLayoutBinding uboLayoutBinding{};
-            uboLayoutBinding.binding = 0;
-            uboLayoutBinding.descriptorCount = 1;
-            uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            uboLayoutBinding.pImmutableSamplers = nullptr;
-            uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-            VkDescriptorSetLayoutBinding samplerLayoutBinding{};
-            samplerLayoutBinding.binding = 1;
-            samplerLayoutBinding.descriptorCount = 1;
-            samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            samplerLayoutBinding.pImmutableSamplers = nullptr;
-            samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-            std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
-            VkDescriptorSetLayoutCreateInfo layoutInfo{};
-            layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-            layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-            layoutInfo.pBindings = bindings.data();
-
-            if (vkCreateDescriptorSetLayout(m_Device, &layoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
-            {
-                throw std::runtime_error("failed to create descriptor set layout!");
-            }
-        }
-        void VKRenderer::CreateFramebuffers()
+        void VulkanRenderer::CreateFramebuffers()
         {
             m_SwapChainFramebuffers.resize(m_SwapChainImageViews.size());
 
@@ -537,7 +512,7 @@ namespace MilkShake
 
                 VkFramebufferCreateInfo framebufferInfo{};
                 framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-                framebufferInfo.renderPass = m_RenderPass;
+                framebufferInfo.renderPass = m_PostRenderPass;
                 framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
                 framebufferInfo.pAttachments = attachments.data();
                 framebufferInfo.width = m_SwapChainExtent.width;
@@ -550,7 +525,7 @@ namespace MilkShake
                 }
             }
         }
-        void VKRenderer::CreateCommandPool()
+        void VulkanRenderer::CreateCommandPool()
         {
             QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(m_PhysicalDevice);
 
@@ -564,7 +539,7 @@ namespace MilkShake
                 throw std::runtime_error("failed to create graphics command pool!");
             }
         }
-        void VKRenderer::CreateDepthResources()
+        void VulkanRenderer::CreateDepthResources()
         {
             VkFormat depthFormat = Utility::FindDepthFormat(*this);
 
@@ -572,7 +547,7 @@ namespace MilkShake
             m_DepthImageView = CreateImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
         }
 
-        VkImageView VKRenderer::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
+        VkImageView VulkanRenderer::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
         {
             VkImageViewCreateInfo viewInfo{};
             viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -593,7 +568,7 @@ namespace MilkShake
 
             return imageView;
         }
-        void VKRenderer::CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
+        void VulkanRenderer::CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
         {
             VkImageCreateInfo imageInfo{};
             imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -630,7 +605,7 @@ namespace MilkShake
 
             vkBindImageMemory(m_Device, image, imageMemory, 0);
         }
-        void VKRenderer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
+        void VulkanRenderer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
         {
             VkBufferCreateInfo bufferInfo{};
             bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -659,7 +634,7 @@ namespace MilkShake
             vkBindBufferMemory(m_Device, buffer, bufferMemory, 0);
         }
 
-        void VKRenderer::CreateCommandBuffers()
+        void VulkanRenderer::CreateCommandBuffers()
         {
             m_CommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
@@ -674,7 +649,7 @@ namespace MilkShake
                 throw std::runtime_error("failed to allocate command buffers!");
             }
         }
-        void VKRenderer::CreateSyncObjects()
+        void VulkanRenderer::CreateSyncObjects()
         {
             m_ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
             m_RenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
@@ -698,7 +673,7 @@ namespace MilkShake
             }
         }
 
-        void VKRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+        void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
         {
             /*
                 Dispatch the ray tracing commands
@@ -721,27 +696,9 @@ namespace MilkShake
                 m_SwapChainExtent.width,
                 m_SwapChainExtent.height,
                 1);
-
-            Utility::TransitionImageLayout(*this, commandBuffer,
-                m_StorageImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-            Utility::TransitionImageLayout(*this, commandBuffer,
-                m_SwapChainImages[imageIndex], VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-            VkImageCopy copyRegion{};
-            copyRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-            copyRegion.srcOffset = { 0, 0, 0 };
-            copyRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-            copyRegion.dstOffset = { 0, 0, 0 };
-            copyRegion.extent = { m_SwapChainExtent.width, m_SwapChainExtent.height, 1 };
-            vkCmdCopyImage(commandBuffer, m_StorageImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_SwapChainImages[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-
-            Utility::TransitionImageLayout(*this, commandBuffer,
-                m_StorageImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-            Utility::TransitionImageLayout(*this, commandBuffer,
-                m_SwapChainImages[imageIndex], VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
         }
 
-        void VKRenderer::DrawFrame()
+        void VulkanRenderer::DrawFrame()
         {
             vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
 
@@ -752,6 +709,8 @@ namespace MilkShake
             {
                 RecreateSwapChain();
                 ReCreateStorageImage();
+                UpdatePostDescriptor();
+                UpdatePostProcessUniformData();
                 uniformData.frame = 0;
                 return;
             }
@@ -775,7 +734,7 @@ namespace MilkShake
             }
             
             RecordCommandBuffer(m_CommandBuffers[m_CurrentFrame], imageIndex);
-            //RenderImGui(imageIndex);
+            RenderImGui(imageIndex);
 
             if (vkEndCommandBuffer(m_CommandBuffers[m_CurrentFrame]) != VK_SUCCESS)
             {
@@ -822,6 +781,8 @@ namespace MilkShake
                 m_FramebufferResized = false;
                 RecreateSwapChain();
                 ReCreateStorageImage();
+                UpdatePostDescriptor();
+                UpdatePostProcessUniformData();
                 uniformData.frame = 0;
             }
             else if (result != VK_SUCCESS)
@@ -832,7 +793,7 @@ namespace MilkShake
             m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
         }
 
-        VkShaderModule VKRenderer::CreateShaderModule(const std::vector<uint32_t>& code)
+        VkShaderModule VulkanRenderer::CreateShaderModule(const std::vector<uint32_t>& code)
         {
             VkShaderModuleCreateInfo createInfo{};
             createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -848,7 +809,7 @@ namespace MilkShake
             return shaderModule;
         }
 
-        VkSurfaceFormatKHR VKRenderer::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
+        VkSurfaceFormatKHR VulkanRenderer::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
         {
             for (const auto& availableFormat : availableFormats)
             {
@@ -860,7 +821,7 @@ namespace MilkShake
 
             return availableFormats[0];
         }
-        VkPresentModeKHR VKRenderer::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
+        VkPresentModeKHR VulkanRenderer::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
         {
             for (const auto& availablePresentMode : availablePresentModes)
             {
@@ -872,7 +833,7 @@ namespace MilkShake
 
             return VK_PRESENT_MODE_FIFO_KHR;
         }
-        VkExtent2D VKRenderer::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities)
+        VkExtent2D VulkanRenderer::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities)
         {
             if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
             {
@@ -896,7 +857,7 @@ namespace MilkShake
             }
         }
 
-        SwapChainSupportDetails VKRenderer::QuerySwapChainSupport(VkPhysicalDevice device)
+        SwapChainSupportDetails VulkanRenderer::QuerySwapChainSupport(VkPhysicalDevice device)
         {
             SwapChainSupportDetails details;
 
@@ -922,7 +883,7 @@ namespace MilkShake
 
             return details;
         }
-        bool VKRenderer::IsDeviceSuitable(VkPhysicalDevice device)
+        bool VulkanRenderer::IsDeviceSuitable(VkPhysicalDevice device)
         {
             QueueFamilyIndices indices = FindQueueFamilies(device);
 
@@ -940,7 +901,7 @@ namespace MilkShake
 
             return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
         }
-        bool VKRenderer::CheckDeviceExtensionSupport(VkPhysicalDevice device)
+        bool VulkanRenderer::CheckDeviceExtensionSupport(VkPhysicalDevice device)
         {
             uint32_t extensionCount;
             vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
@@ -957,7 +918,7 @@ namespace MilkShake
 
             return requiredExtensions.empty();
         }
-        QueueFamilyIndices VKRenderer::FindQueueFamilies(VkPhysicalDevice device)
+        QueueFamilyIndices VulkanRenderer::FindQueueFamilies(VkPhysicalDevice device)
         {
             QueueFamilyIndices indices;
 
@@ -993,7 +954,7 @@ namespace MilkShake
 
             return indices;
         }
-        std::vector<const char*> VKRenderer::GetRequiredExtensions()
+        std::vector<const char*> VulkanRenderer::GetRequiredExtensions()
         {
             uint32_t glfwExtensionCount = 0;
             const char** glfwExtensions;
@@ -1008,7 +969,7 @@ namespace MilkShake
 
             return extensions;
         }
-        bool VKRenderer::CheckValidationLayerSupport()
+        bool VulkanRenderer::CheckValidationLayerSupport()
         {
             uint32_t layerCount;
             vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
@@ -1041,14 +1002,18 @@ namespace MilkShake
         // --------------------------------------------------------------------------------------------------------------------------
         //                                                     Post - Processing
         // --------------------------------------------------------------------------------------------------------------------------
-        void VKRenderer::CreatePostDescriptor()
+        void VulkanRenderer::CreatePostDescriptor()
         {
             m_PostDescriptor.SetBindings(m_Device, {
-                    {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT}
+                    {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT},
+                    {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT}
                 });
-            //m_PostDescriptor.Write(m_Device, 0, m_scImageBuffer.Descriptor());
+
+            m_PostSampler = Utility::CreateTextureSampler(*this);
+
+            UpdatePostDescriptor();
         }
-        void VKRenderer::CreatePostPipeline()
+        void VulkanRenderer::CreatePostPipeline()
         {
             auto vertShaderCode = Shader::ReadFile("assets/shaders/post.vert");
             auto fragShaderCode = Shader::ReadFile("assets/shaders/post.frag");
@@ -1138,7 +1103,7 @@ namespace MilkShake
             VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
             pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
             pipelineLayoutInfo.setLayoutCount = 1;
-            //pipelineLayoutInfo.pSetLayouts = &m_DescriptorSetLayout;
+            pipelineLayoutInfo.pSetLayouts = &m_PostDescriptor.descSetLayout;
 
             if (vkCreatePipelineLayout(m_Device, &pipelineLayoutInfo, nullptr, &m_PostPipelineLayout) != VK_SUCCESS)
             {
@@ -1170,11 +1135,105 @@ namespace MilkShake
             vkDestroyShaderModule(m_Device, fragShaderModule, nullptr);
             vkDestroyShaderModule(m_Device, vertShaderModule, nullptr);
         }
+        void VulkanRenderer::CreatePostRenderPass()
+        {
+            std::array<VkAttachmentDescription, 2> attachments{};
+            // Color attachment
+            attachments[0].format = VK_FORMAT_B8G8R8A8_UNORM;
+            attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+
+            // Depth attachment
+            attachments[1].format = Utility::FindDepthFormat(*this);
+            attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+
+            const VkAttachmentReference colorReference{ 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+            const VkAttachmentReference depthReference{ 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+
+            std::array<VkSubpassDependency, 1> subpassDependencies{};
+            // Transition from final to initial (VK_SUBPASS_EXTERNAL refers to all commands executed outside of the actual renderpass)
+            subpassDependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+            subpassDependencies[0].dstSubpass = 0;
+            subpassDependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+            subpassDependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            subpassDependencies[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+            subpassDependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
+                | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            subpassDependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+            VkSubpassDescription subpassDescription{};
+            subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+            subpassDescription.colorAttachmentCount = 1;
+            subpassDescription.pColorAttachments = &colorReference;
+            subpassDescription.pDepthStencilAttachment = &depthReference;
+
+            VkRenderPassCreateInfo renderPassInfo{ VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO };
+            renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+            renderPassInfo.pAttachments = attachments.data();
+            renderPassInfo.subpassCount = 1;
+            renderPassInfo.pSubpasses = &subpassDescription;
+            renderPassInfo.dependencyCount = static_cast<uint32_t>(subpassDependencies.size());
+            renderPassInfo.pDependencies = subpassDependencies.data();
+
+            vkCreateRenderPass(m_Device, &renderPassInfo, nullptr, &m_PostRenderPass);
+        }
+        void VulkanRenderer::CreatePostUniformBuffer()
+        {
+            Utility::CreateBuffer(*this,
+                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                &m_PostUniformBuffer,
+                sizeof(PostProcessData),
+                &m_PostProcessData);
+
+            m_PostUniformBuffer.Map();
+
+            // TODO: Update first when created???
+            UpdatePostProcessUniformData();
+        }
+        void VulkanRenderer::UpdatePostDescriptor()
+        {
+            VkDescriptorImageInfo imageInfo{};
+            imageInfo.imageView = m_StorageImageView;
+            imageInfo.sampler = m_PostSampler;
+            imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+            m_PostDescriptor.Write(m_Device, 0, imageInfo);
+            m_PostDescriptor.Write(m_Device, 1, m_PostUniformBuffer.buffer);
+        }
+        void VulkanRenderer::UpdatePostProcessUniformData()
+        {
+            m_PostProcessData.screenSize = { m_SwapChainExtent.width, m_SwapChainExtent.height };
+
+            memcpy(m_PostUniformBuffer.mapped, &m_PostProcessData, sizeof(PostProcessData));
+        }
+        void VulkanRenderer::CleanupPostProcess()
+        {
+            vkDestroyPipeline(m_Device, m_PostPipeline, nullptr);
+            vkDestroyPipelineLayout(m_Device, m_PostPipelineLayout, nullptr);
+            vkDestroyRenderPass(m_Device, m_PostRenderPass, nullptr);
+            m_PostDescriptor.Destroy(m_Device);
+            vkDestroySampler(m_Device, m_PostSampler, nullptr);
+            m_PostUniformBuffer.Destroy();
+        }
+        void VulkanRenderer::CleanupImGui()
+        {
+            ImGui_ImplVulkan_Shutdown();
+            ImGui_ImplGlfw_Shutdown();
+
+            ImGui::DestroyContext();
+
+            vkDestroyDescriptorPool(m_Device, m_ImGuiPool, nullptr);
+        }
 
         // --------------------------------------------------------------------------------------------------------------------------
         //                                                     Load Model Stuff
         // --------------------------------------------------------------------------------------------------------------------------
-        int VKRenderer::LoadModel(const std::filesystem::path& _filePath)
+        int VulkanRenderer::LoadModel(const std::filesystem::path& _filePath)
         {
             int id = m_Models.size();
             Model* newModel = new Model(id, "");
@@ -1183,7 +1242,7 @@ namespace MilkShake
             m_Models.push_back(newModel);
             return id;
         }
-        int VKRenderer::LoadTexture(const std::filesystem::path& _filePath)
+        int VulkanRenderer::LoadTexture(const std::filesystem::path& _filePath)
         {
             auto targetTexture = m_TexturesMap.find(_filePath);
             if (targetTexture != m_TexturesMap.end())
@@ -1198,7 +1257,7 @@ namespace MilkShake
 
             return id;
         }
-        int VKRenderer::CreateMaterial(Material _material)
+        int VulkanRenderer::CreateMaterial(Material _material)
         {
             int id = m_MaterialsMap.size();
             m_MaterialsMap[id] = _material;
@@ -1208,7 +1267,7 @@ namespace MilkShake
         // --------------------------------------------------------------------------------------------------------------------------
         //                                                     Ray Tracing Stuff
         // --------------------------------------------------------------------------------------------------------------------------
-        void VKRenderer::InitRayTracing()
+        void VulkanRenderer::InitRayTracing()
         {
             // Requesting ray tracing properties
             m_RayTracingPipelineProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
@@ -1247,7 +1306,7 @@ namespace MilkShake
             CreateShaderBindingTables();
             CreateRayTracingDescriptorSets();
         }
-        void VKRenderer::CleanRayTracing()
+        void VulkanRenderer::CleanRayTracing()
         {
             vkDestroyPipeline(m_Device, m_RtPipeline, nullptr);
             vkDestroyPipelineLayout(m_Device, m_RtPipelineLayout, nullptr);
@@ -1277,7 +1336,7 @@ namespace MilkShake
             m_GeometryNodesBuffer.Destroy();
         }
         
-        ScratchBuffer VKRenderer::CreateScratchBuffer(VkDeviceSize size)
+        ScratchBuffer VulkanRenderer::CreateScratchBuffer(VkDeviceSize size)
         {
             ScratchBuffer scratchBuffer{};
 
@@ -1310,7 +1369,7 @@ namespace MilkShake
 
             return scratchBuffer;
         }
-        void VKRenderer::DeleteScratchBuffer(ScratchBuffer& scratchBuffer)
+        void VulkanRenderer::DeleteScratchBuffer(ScratchBuffer& scratchBuffer)
         {
             if (scratchBuffer.memory != VK_NULL_HANDLE) {
                 vkFreeMemory(m_Device, scratchBuffer.memory, nullptr);
@@ -1320,7 +1379,7 @@ namespace MilkShake
             }
         }
 
-        void VKRenderer::CreateAccelerationStructure(AccelerationStructure& accelerationStructure, VkAccelerationStructureTypeKHR type, VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo)
+        void VulkanRenderer::CreateAccelerationStructure(AccelerationStructure& accelerationStructure, VkAccelerationStructureTypeKHR type, VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo)
         {
             // Buffer & Memory
             VkBufferCreateInfo bufferCreateInfo{};
@@ -1357,14 +1416,14 @@ namespace MilkShake
             accelerationDeviceAddressInfo.accelerationStructure = accelerationStructure.handle;
             accelerationStructure.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(m_Device, &accelerationDeviceAddressInfo);
         }
-        void VKRenderer::DeleteAccelerationStructure(AccelerationStructure& accelerationStructure)
+        void VulkanRenderer::DeleteAccelerationStructure(AccelerationStructure& accelerationStructure)
         {
             vkFreeMemory(m_Device, accelerationStructure.memory, nullptr);
             vkDestroyBuffer(m_Device, accelerationStructure.buffer, nullptr);
             vkDestroyAccelerationStructureKHR(m_Device, accelerationStructure.handle, nullptr);
         }
 
-        void VKRenderer::CreateAccelerationStructureBuffer(AccelerationStructure& accelerationStructure, VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo)
+        void VulkanRenderer::CreateAccelerationStructureBuffer(AccelerationStructure& accelerationStructure, VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo)
         {
             VkBufferCreateInfo bufferCreateInfo{};
             bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1390,7 +1449,7 @@ namespace MilkShake
             vkBindBufferMemory(m_Device, accelerationStructure.buffer, accelerationStructure.memory, 0);
         }
 
-        AccelerationStructure VKRenderer::CreateBottomLevelAccelerationStructure(Model* model)
+        AccelerationStructure VulkanRenderer::CreateBottomLevelAccelerationStructure(Model* model)
         {
             AccelerationStructure blas;
 
@@ -1556,7 +1615,7 @@ namespace MilkShake
             m_BottomLevelAS.push_back(blas);
             return blas;
         }
-        void VKRenderer::CreateTopLevelAccelerationStructure()
+        void VulkanRenderer::CreateTopLevelAccelerationStructure()
         {
             VkTransformMatrixKHR transformMatrix = {
                 1.0f, 0.0f, 0.0f, 0.0f,
@@ -1664,7 +1723,7 @@ namespace MilkShake
             instancesBuffer.Destroy();
         }
 
-        void VKRenderer::CreateShaderBindingTable(ShaderBindingTable& shaderBindingTable, uint32_t handleCount)
+        void VulkanRenderer::CreateShaderBindingTable(ShaderBindingTable& shaderBindingTable, uint32_t handleCount)
         {
             // Create buffer to hold all shader handles for the SBT
             Utility::CreateBuffer(*this,
@@ -1677,7 +1736,7 @@ namespace MilkShake
             // Map persistent
             shaderBindingTable.Map();
         }
-        void VKRenderer::CreateShaderBindingTables()
+        void VulkanRenderer::CreateShaderBindingTables()
         {
             const uint32_t handleSize = m_RayTracingPipelineProperties.shaderGroupHandleSize;
             const uint32_t handleSizeAligned = Utility::AlignedSize(m_RayTracingPipelineProperties.shaderGroupHandleSize, m_RayTracingPipelineProperties.shaderGroupHandleAlignment);
@@ -1698,7 +1757,7 @@ namespace MilkShake
             memcpy(m_ShaderBindingTables.hit.mapped, shaderHandleStorage.data() + handleSizeAligned * 3, handleSize);
         }
         
-        void VKRenderer::CreateRayTracingPipeline()
+        void VulkanRenderer::CreateRayTracingPipeline()
         {
             // [DONE] TODO: Added TextureCount on model
             uint32_t imageCount = static_cast<uint32_t>(m_Textures.size());
@@ -1816,7 +1875,7 @@ namespace MilkShake
             rayTracingPipelineCI.layout = m_RtPipelineLayout;
             vkCreateRayTracingPipelinesKHR(m_Device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &rayTracingPipelineCI, nullptr, &m_RtPipeline);
         }
-        void VKRenderer::CreateRayTracingDescriptorSets()
+        void VulkanRenderer::CreateRayTracingDescriptorSets()
         {
             // [DONE] TODO: Load Texture
             uint32_t imageCount = static_cast<uint32_t>(m_Textures.size());
@@ -1920,7 +1979,7 @@ namespace MilkShake
 
             vkUpdateDescriptorSets(m_Device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, VK_NULL_HANDLE);
         }
-        void VKRenderer::CreateRayTracingUniformBuffer()
+        void VulkanRenderer::CreateRayTracingUniformBuffer()
         {
             Utility::CreateBuffer(*this,
                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -1935,7 +1994,7 @@ namespace MilkShake
             //updateUniformBuffers();
         }
 
-        void VKRenderer::UpdateRayTracingUniformBuffer()
+        void VulkanRenderer::UpdateRayTracingUniformBuffer()
         {
             
             glm::mat4 view = m_Camera.GetViewMatrix();
@@ -1952,14 +2011,14 @@ namespace MilkShake
             memcpy(m_RtUniformBuffer.mapped, &uniformData, sizeof(uniformData));
         }
 
-        uint64_t VKRenderer::GetBufferDeviceAddress(VkBuffer buffer)
+        uint64_t VulkanRenderer::GetBufferDeviceAddress(VkBuffer buffer)
         {
             VkBufferDeviceAddressInfoKHR bufferDeviceAI{};
             bufferDeviceAI.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
             bufferDeviceAI.buffer = buffer;
             return vkGetBufferDeviceAddressKHR(m_Device, &bufferDeviceAI);
         }
-        VkStridedDeviceAddressRegionKHR VKRenderer::GetSbtEntryStridedDeviceAddressRegion(VkBuffer buffer, uint32_t handleCount)
+        VkStridedDeviceAddressRegionKHR VulkanRenderer::GetSbtEntryStridedDeviceAddressRegion(VkBuffer buffer, uint32_t handleCount)
         {
             const uint32_t handleSizeAligned = Utility::AlignedSize(m_RayTracingPipelineProperties.shaderGroupHandleSize, m_RayTracingPipelineProperties.shaderGroupHandleAlignment);
             VkStridedDeviceAddressRegionKHR stridedDeviceAddressRegionKHR{};
@@ -1969,7 +2028,7 @@ namespace MilkShake
             return stridedDeviceAddressRegionKHR;
         }
 
-        void VKRenderer::CreateStorageImage()
+        void VulkanRenderer::CreateStorageImage()
         {
             // Release resources if image is to be recreated
             if (m_StorageImage != VK_NULL_HANDLE) 
@@ -1986,7 +2045,7 @@ namespace MilkShake
             CreateImage(m_SwapChainExtent.width, m_SwapChainExtent.height,
                 m_SwapChainImageFormat,
                 VK_IMAGE_TILING_OPTIMAL,
-                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                 m_StorageImage, m_StorageImageMemory);
 
@@ -1994,13 +2053,13 @@ namespace MilkShake
 
             Utility::TransitionImageLayout(*this, m_CommandPool, m_StorageImage, m_SwapChainImageFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
         }
-        void VKRenderer::DestroyStorageImage()
+        void VulkanRenderer::DestroyStorageImage()
         {
             vkDestroyImageView(m_Device, m_StorageImageView, nullptr);
             vkDestroyImage(m_Device, m_StorageImage, nullptr);
             vkFreeMemory(m_Device, m_StorageImageMemory, nullptr);
         }
-        void VKRenderer::ReCreateStorageImage()
+        void VulkanRenderer::ReCreateStorageImage()
         {
             CreateStorageImage();
 
@@ -2019,7 +2078,7 @@ namespace MilkShake
         // --------------------------------------------------------------------------------------------------------------------------
         //                                                     ImGui Stuff
         // --------------------------------------------------------------------------------------------------------------------------
-        void VKRenderer::InitImGui()
+        void VulkanRenderer::InitImGui()
         {	
             // Create Descriptor Pool for ImGui
             VkDescriptorPoolSize pool_sizes[] =
@@ -2044,8 +2103,7 @@ namespace MilkShake
             pool_info.poolSizeCount = std::size(pool_sizes);
             pool_info.pPoolSizes = pool_sizes;
 
-            VkDescriptorPool imguiPool;
-            vkCreateDescriptorPool(m_Device, &pool_info, nullptr, &imguiPool);
+            vkCreateDescriptorPool(m_Device, &pool_info, nullptr, &m_ImGuiPool);
 
             // Initialize ImGui library
             ImGui::CreateContext();
@@ -2056,8 +2114,8 @@ namespace MilkShake
             init_info.PhysicalDevice = m_PhysicalDevice;
             init_info.Device = m_Device;
             init_info.Queue = m_GraphicsQueue;
-            init_info.DescriptorPool = imguiPool;
-            init_info.RenderPass = m_RenderPass;
+            init_info.DescriptorPool = m_ImGuiPool;
+            init_info.RenderPass = m_PostRenderPass;
             init_info.MinImageCount = 3;
             init_info.ImageCount = 3;
             init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
@@ -2065,11 +2123,11 @@ namespace MilkShake
             ImGui_ImplVulkan_Init(&init_info);
             ImGui_ImplVulkan_CreateFontsTexture();
         }
-        void VKRenderer::RenderImGui(size_t imageIndex)
+        void VulkanRenderer::RenderImGui(size_t imageIndex)
         {
             VkRenderPassBeginInfo renderPassInfo{};
             renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            renderPassInfo.renderPass = m_RenderPass;
+            renderPassInfo.renderPass = m_PostRenderPass;
             renderPassInfo.framebuffer = m_SwapChainFramebuffers[imageIndex];
             renderPassInfo.renderArea.offset = { 0, 0 };
             renderPassInfo.renderArea.extent = m_SwapChainExtent;
@@ -2082,18 +2140,40 @@ namespace MilkShake
             renderPassInfo.pClearValues = clearValues.data();
 
             vkCmdBeginRenderPass(m_CommandBuffers[m_CurrentFrame], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+            {
+                VkViewport viewport{};
+                viewport.x = 0.0f;
+                viewport.y = 0.0f;
+                viewport.width = (float)m_SwapChainExtent.width;
+                viewport.height = (float)m_SwapChainExtent.height;
+                viewport.minDepth = 0.0f;
+                viewport.maxDepth = 1.0f;
+                vkCmdSetViewport(m_CommandBuffers[m_CurrentFrame], 0, 1, &viewport);
 
-            // Render ImGui
-            ImGui_ImplVulkan_NewFrame();
-            ImGui_ImplGlfw_NewFrame();
+                VkRect2D scissor{};
+                scissor.offset = { 0, 0 };
+                scissor.extent = m_SwapChainExtent;
+                vkCmdSetScissor(m_CommandBuffers[m_CurrentFrame], 0, 1, &scissor);
 
-            ImGui::NewFrame();
+                vkCmdBindPipeline(m_CommandBuffers[m_CurrentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PostPipeline);
+                // Eventually uncomment this
+                vkCmdBindDescriptorSets(m_CommandBuffers[m_CurrentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    m_PostPipelineLayout, 0, 1, &m_PostDescriptor.descSet, 0, nullptr);
 
-            ImGui::ShowDemoWindow();
+                // TODO: Understand this MAGIC where it render the RAW Ray-Traced Image in square texture
+                vkCmdDraw(m_CommandBuffers[m_CurrentFrame], 3, 1, 0, 0);
 
-            ImGui::Render();
-            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), m_CommandBuffers[m_CurrentFrame]);
+                // Render ImGui
+                ImGui_ImplVulkan_NewFrame();
+                ImGui_ImplGlfw_NewFrame();
 
+                ImGui::NewFrame();
+
+                ImGui::ShowDemoWindow();
+
+                ImGui::Render();
+                ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), m_CommandBuffers[m_CurrentFrame]);
+            }
             vkCmdEndRenderPass(m_CommandBuffers[m_CurrentFrame]);
 
         }

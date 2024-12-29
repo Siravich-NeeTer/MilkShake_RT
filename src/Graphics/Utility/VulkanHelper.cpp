@@ -1,206 +1,13 @@
-#include "VKUtilities.h"
+#include "VulkanHelper.h"
 
-#include "Renderer/VKRenderer.h"
-#include "Renderer/Buffer.h"
+#include "Graphics/VulkanRenderer.h"
+#include "Graphics/Buffer.h"
+#include "Graphics/ImageWrap.h"
 
 namespace MilkShake
 {
 	namespace Graphics
 	{
-		namespace Shader
-		{
-			shaderc::Compiler compiler;
-			shaderc::CompileOptions options;
-
-			shaderc_include_result* IncludeCallback::GetInclude(
-				const char* requested_source,
-				shaderc_include_type type,
-				const char* requesting_source,
-				size_t requesting_source_length)
-			{
-				// Try to find the included file in the specified directories
-				for (const auto& dir : includeDirs_) 
-				{
-					std::string fullPath = dir + requested_source;
-					std::ifstream includeFile(fullPath);
-
-					if (includeFile.is_open()) 
-					{
-						std::ostringstream ss;
-						ss << includeFile.rdbuf();
-						std::string fileContent = ss.str();
-
-						// Allocate a result struct to return the file content
-						shaderc_include_result* result = new shaderc_include_result;
-						result->content = _strdup(fileContent.c_str());  // Copy the content of the include file
-						result->content_length = fileContent.size();
-						result->source_name = _strdup(requested_source);  // Set the source name
-						result->source_name_length = strlen(requested_source);
-
-						return result;
-					}
-				}
-
-				// If the file couldn't be found, return nullptr
-				return nullptr;
-			}        
-			void IncludeCallback::ReleaseInclude(shaderc_include_result* data) 
-			{
-				if (data) 
-				{
-					delete data->content;
-					delete data->source_name;
-					delete data;
-				}
-			}
-
-			VkPipelineShaderStageCreateInfo LoadShader(VKRenderer& _vkRenderer, const std::filesystem::path& shaderPath)
-			{
-				std::vector<uint32_t> code = Shader::ReadFile(shaderPath);
-
-				VkShaderModuleCreateInfo shaderModuleCreateInfo{};
-				shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-				shaderModuleCreateInfo.codeSize = code.size() * sizeof(uint32_t);
-				shaderModuleCreateInfo.pCode = code.data();
-
-				VkShaderModule shaderModule;
-				if (vkCreateShaderModule(_vkRenderer.GetDevice(), &shaderModuleCreateInfo, nullptr, &shaderModule) != VK_SUCCESS)
-				{
-					throw std::runtime_error("failed to create shader module!");
-				}
-				_vkRenderer.AddShaderModule(shaderModule);
-
-				VkPipelineShaderStageCreateInfo shaderStageCreateInfo{};
-				shaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-				shaderStageCreateInfo.stage = GetShaderStageFlag(shaderPath);
-				shaderStageCreateInfo.module = shaderModule;
-				shaderStageCreateInfo.pName = "main";
-
-				return shaderStageCreateInfo;
-			}
-			std::vector<uint32_t> ReadFile(const std::filesystem::path& shaderPath)
-			{
-				std::string fileExtension = shaderPath.extension().string();
-				// If file is not compile (.vert, .frag, ...)
-				if (fileExtension != ".spv")
-				{
-					return CompileGLSLToSpirV(shaderPath);
-				}
-
-				std::ifstream file(shaderPath, std::ios::ate | std::ios::binary);
-				// TODO: Better Error Handler
-				if (!file.is_open())
-				{
-					throw std::runtime_error("Failed to open " + shaderPath.string());
-				}
-				size_t fileSize = (size_t)file.tellg();
-				std::vector<char> buffer(fileSize);
-
-				file.seekg(0);
-				file.read(buffer.data(), fileSize);
-				file.close();
-
-				// Cast the data
-				const uint32_t* uint32Ptr = reinterpret_cast<const uint32_t*>(buffer.data());
-
-				// Create the uint32_t vector using the casted data
-				std::vector<uint32_t> uint32Vec(uint32Ptr, uint32Ptr + (buffer.size() / sizeof(uint32_t)));
-
-				return uint32Vec;
-			}
-			shaderc_shader_kind GetShaderKind(const std::filesystem::path& shaderPath)
-			{
-				std::string fileExtension = shaderPath.extension().string();
-
-				if (fileExtension == ".vert")
-					return shaderc_vertex_shader;
-				if (fileExtension == ".frag")
-					return shaderc_fragment_shader;
-				if (fileExtension == ".geom")
-					return shaderc_geometry_shader;
-				if (fileExtension == ".comp")
-					return shaderc_compute_shader;
-				if (fileExtension == ".rgen")
-					return shaderc_raygen_shader;
-				if (fileExtension == ".rmiss")
-					return shaderc_miss_shader;
-				if (fileExtension == ".rchit")
-					return shaderc_closesthit_shader;
-				if (fileExtension == ".rahit")
-					return shaderc_anyhit_shader;
-			}
-			VkShaderStageFlagBits GetShaderStageFlag(const std::filesystem::path& shaderPath)
-			{
-				std::string fileExtension = shaderPath.extension().string();
-				if (fileExtension == ".spv")
-				{
-					std::string newPath = shaderPath.string();
-					newPath.erase(newPath.find(".spv"), 4);
-					fileExtension = std::filesystem::path(newPath).extension().string();
-				}
-
-				if (fileExtension == ".vert")
-					return VK_SHADER_STAGE_VERTEX_BIT;
-				if (fileExtension == ".frag")
-					return VK_SHADER_STAGE_FRAGMENT_BIT;
-				if (fileExtension == ".geom")
-					return VK_SHADER_STAGE_GEOMETRY_BIT;
-				if (fileExtension == ".comp")
-					return VK_SHADER_STAGE_COMPUTE_BIT;
-				if (fileExtension == ".rgen")
-					return VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-				if (fileExtension == ".rmiss")
-					return VK_SHADER_STAGE_MISS_BIT_KHR;
-				if (fileExtension == ".rchit")
-					return VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
-				if (fileExtension == ".rahit")
-					return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
-
-				return VK_SHADER_STAGE_ALL;
-			}
-			std::vector<uint32_t> CompileGLSLToSpirV(const std::filesystem::path& shaderPath)
-			{
-				std::ifstream file(shaderPath);
-				// TODO: Better Error Handler
-				if (!file.is_open())
-				{
-					throw std::runtime_error("Failed to open " + shaderPath.string());
-				}
-				std::ostringstream ss;
-				ss << file.rdbuf();
-				const std::string& s = ss.str();
-				std::vector<char> shaderCode(s.begin(), s.end());
-
-				// Set Compiler SPIR_V version to 1.4
-				options.SetTargetSpirv(shaderc_spirv_version_1_4);
-
-				// Define the directories to search for included files
-				std::vector<std::string> includeDirs = { "assets/shaders/" };
-
-				// Create the includer and set it in the compile options
-				auto includer = std::make_unique<IncludeCallback>(includeDirs);
-				options.SetIncluder(std::move(includer));
-
-				shaderc::SpvCompilationResult result = compiler.CompileGlslToSpv(
-					shaderCode.data(),
-					shaderCode.size(),
-					GetShaderKind(shaderPath),
-					shaderPath.filename().string().c_str(),
-					"main",
-					options
-				);
-
-				// Check if there were any compilation errors
-				// TODO: Better Error Handler
-				if (result.GetCompilationStatus() != shaderc_compilation_status_success)
-				{
-					throw std::runtime_error(result.GetErrorMessage());
-				}
-
-				// Return the compiled SPIR-V binary as a vector of uint32_t
-				return std::vector<uint32_t>(result.begin(), result.end()); ;
-			}
-		}
 		namespace Utility
 		{
 			uint32_t AlignedSize(uint32_t value, uint32_t alignment)
@@ -220,7 +27,7 @@ namespace MilkShake
 			// --------------------------------------------------------------------------------------------------------------------------
 			//                                              Vulkan Core Utilities Function
 			// --------------------------------------------------------------------------------------------------------------------------
-			VkCommandBuffer BeginSingleTimeCommands(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool)
+			VkCommandBuffer BeginSingleTimeCommands(const VulkanRenderer& _vkRenderer, const VkCommandPool& _commandPool)
 			{
 				VkCommandBufferAllocateInfo allocInfo{};
 				allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -239,7 +46,7 @@ namespace MilkShake
 
 				return commandBuffer;
 			}
-			void EndSingleTimeCommands(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, VkCommandBuffer commandBuffer)
+			void EndSingleTimeCommands(const VulkanRenderer& _vkRenderer, const VkCommandPool& _commandPool, VkCommandBuffer commandBuffer)
 			{
 				vkEndCommandBuffer(commandBuffer);
 
@@ -253,7 +60,7 @@ namespace MilkShake
 
 				vkFreeCommandBuffers(_vkRenderer.GetDevice(), _commandPool, 1, &commandBuffer);
 			}
-			VkImageView CreateImageView(const VKRenderer& _vkRenderer, VkImage image, VkFormat format, VkImageAspectFlags _aspectFlags)
+			VkImageView CreateImageView(const VulkanRenderer& _vkRenderer, VkImage image, VkFormat format, VkImageAspectFlags _aspectFlags)
 			{
 				VkImageViewCreateInfo viewInfo{};
 				viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -275,7 +82,7 @@ namespace MilkShake
 				return imageView;
 			}
 
-			void CreateBuffer(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, VkDeviceSize _size, VkBufferUsageFlags _usage, VkMemoryPropertyFlags _properties, VkBuffer& _buffer, VkDeviceMemory& _bufferMemory)
+			void CreateBuffer(const VulkanRenderer& _vkRenderer, const VkCommandPool& _commandPool, VkDeviceSize _size, VkBufferUsageFlags _usage, VkMemoryPropertyFlags _properties, VkBuffer& _buffer, VkDeviceMemory& _bufferMemory)
 			{
 				VkBufferCreateInfo bufferInfo{};
 				bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -301,7 +108,7 @@ namespace MilkShake
 
 				vkBindBufferMemory(_vkRenderer.GetDevice(), _buffer, _bufferMemory, 0);
 			}
-			void CreateBuffer(const VKRenderer& _vkRenderer, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, Buffer* buffer, VkDeviceSize size, void* data)
+			void CreateBuffer(const VulkanRenderer& _vkRenderer, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, Buffer* buffer, VkDeviceSize size, void* data)
 			{
 				buffer->device = _vkRenderer.GetDevice();
 
@@ -352,7 +159,7 @@ namespace MilkShake
 				// Attach the memory to the buffer object
 				buffer->Bind();
 			}
-			void CopyBuffer(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, VkBuffer _srcBuffer, VkBuffer _dstBuffer, VkDeviceSize _size)
+			void CopyBuffer(const VulkanRenderer& _vkRenderer, const VkCommandPool& _commandPool, VkBuffer _srcBuffer, VkBuffer _dstBuffer, VkDeviceSize _size)
 			{
 				VkCommandBuffer commandBuffer = BeginSingleTimeCommands(_vkRenderer, _commandPool);
 
@@ -363,7 +170,7 @@ namespace MilkShake
 				EndSingleTimeCommands(_vkRenderer, _commandPool, commandBuffer);
 			}
 			
-			uint32_t FindMemoryType(const VKRenderer& _vkRenderer, uint32_t typeFilter, VkMemoryPropertyFlags properties)
+			uint32_t FindMemoryType(const VulkanRenderer& _vkRenderer, uint32_t typeFilter, VkMemoryPropertyFlags properties)
 			{
 				VkPhysicalDeviceMemoryProperties memProperties;
 				vkGetPhysicalDeviceMemoryProperties(_vkRenderer.GetPhysicalDevice(), &memProperties);
@@ -379,7 +186,7 @@ namespace MilkShake
 				throw std::runtime_error("Failed to find suitable memory type!");
 			}
 
-			void CreateImage(const VKRenderer& _vkRenderer, uint32_t _width, uint32_t _height, VkFormat _format, VkImageTiling _tiling, VkImageUsageFlags _usage, VkMemoryPropertyFlags _properties, VkImage& _image, VkDeviceMemory& _imageMemory)
+			void CreateImage(const VulkanRenderer& _vkRenderer, uint32_t _width, uint32_t _height, VkFormat _format, VkImageTiling _tiling, VkImageUsageFlags _usage, VkMemoryPropertyFlags _properties, VkImage& _image, VkDeviceMemory& _imageMemory)
 			{
 				VkImageCreateInfo imageInfo{};
 				imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -416,7 +223,7 @@ namespace MilkShake
 
 				vkBindImageMemory(_vkRenderer.GetDevice(), _image, _imageMemory, 0);
 			}
-			void CopyBufferToImage(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, VkBuffer _buffer, VkImage _image, uint32_t _width, uint32_t _height)
+			void CopyBufferToImage(const VulkanRenderer& _vkRenderer, const VkCommandPool& _commandPool, VkBuffer _buffer, VkImage _image, uint32_t _width, uint32_t _height)
 			{
 				VkCommandBuffer commandBuffer = BeginSingleTimeCommands(_vkRenderer, _commandPool);
 
@@ -439,13 +246,13 @@ namespace MilkShake
 
 				EndSingleTimeCommands(_vkRenderer, _commandPool, commandBuffer);
 			}
-			void TransitionImageLayout(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, VkImage _image, VkFormat _format, VkImageLayout _oldLayout, VkImageLayout _newLayout)
+			void TransitionImageLayout(const VulkanRenderer& _vkRenderer, const VkCommandPool& _commandPool, VkImage _image, VkFormat _format, VkImageLayout _oldLayout, VkImageLayout _newLayout)
 			{
 				VkCommandBuffer commandBuffer = BeginSingleTimeCommands(_vkRenderer, _commandPool);
 				TransitionImageLayout(_vkRenderer, commandBuffer, _image, _format, _oldLayout, _newLayout);
 				EndSingleTimeCommands(_vkRenderer, _commandPool, commandBuffer);
 			}
-			void TransitionImageLayout(const VKRenderer& _vkRenderer, const VkCommandBuffer& _commandBuffer, VkImage _image, VkFormat _format, VkImageLayout _oldLayout, VkImageLayout _newLayout)
+			void TransitionImageLayout(const VulkanRenderer& _vkRenderer, const VkCommandBuffer& _commandBuffer, VkImage _image, VkFormat _format, VkImageLayout _oldLayout, VkImageLayout _newLayout)
 			{
 				VkImageMemoryBarrier barrier{};
 				barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -571,7 +378,7 @@ namespace MilkShake
 				);
 			}
 
-			VkFormat FindSupportedFormat(const VKRenderer& _vkRenderer, const std::vector<VkFormat>& _formats, VkImageTiling _tiling, VkFormatFeatureFlags _features)
+			VkFormat FindSupportedFormat(const VulkanRenderer& _vkRenderer, const std::vector<VkFormat>& _formats, VkImageTiling _tiling, VkFormatFeatureFlags _features)
 			{
 				for (const VkFormat& format : _formats)
 				{
@@ -590,7 +397,7 @@ namespace MilkShake
 
 				throw std::runtime_error("Failed to find supported format!");
 			}
-			VkFormat FindDepthFormat(const VKRenderer& _vkRenderer)
+			VkFormat FindDepthFormat(const VulkanRenderer& _vkRenderer)
 			{
 				return FindSupportedFormat(_vkRenderer, { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
 					VK_IMAGE_TILING_OPTIMAL,
@@ -599,6 +406,98 @@ namespace MilkShake
 			bool HasStencilComponent(VkFormat _format)
 			{
 				return _format == VK_FORMAT_D32_SFLOAT_S8_UINT || _format == VK_FORMAT_D24_UNORM_S8_UINT;
+			}
+
+			// --------------------------------------------------------------------------------------------------------------------------- //
+			//													Custom Vulkan Structure													   //
+			// --------------------------------------------------------------------------------------------------------------------------- //
+			VkSampler CreateTextureSampler(const VulkanRenderer& _vkRenderer)
+			{
+				VkPhysicalDeviceProperties properties{};
+				vkGetPhysicalDeviceProperties(_vkRenderer.GetPhysicalDevice(), &properties);
+
+				VkSamplerCreateInfo samplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+				samplerInfo.magFilter = VK_FILTER_LINEAR;
+				samplerInfo.minFilter = VK_FILTER_LINEAR;
+				samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+				samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+				samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+				samplerInfo.anisotropyEnable = VK_TRUE;
+				samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+				samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+				samplerInfo.unnormalizedCoordinates = VK_FALSE;
+				samplerInfo.compareEnable = VK_FALSE;
+				samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+				samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+				VkSampler textureSampler;
+				if (vkCreateSampler(_vkRenderer.GetDevice(), &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) 
+				{
+					throw std::runtime_error("failed to create texture sampler!");
+				}
+				return textureSampler;
+			}
+			ImageWrap CreateImageWrap(const VulkanRenderer& _vkRenderer,
+										uint32_t _width, uint32_t _height,
+										VkFormat _format,
+										VkImageUsageFlags _usage,
+										VkMemoryPropertyFlags _properties, uint32_t _mipLevels)
+			{
+				ImageWrap myImage;
+
+				VkImageCreateInfo imageInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+				imageInfo.imageType = VK_IMAGE_TYPE_2D;
+				imageInfo.extent.width = _width;
+				imageInfo.extent.height = _height;
+				imageInfo.extent.depth = 1;
+				imageInfo.mipLevels = _mipLevels;
+				imageInfo.arrayLayers = 1;
+				imageInfo.format = _format;
+				imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+				imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+				imageInfo.usage = _usage;
+				imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+				imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+				vkCreateImage(_vkRenderer.GetDevice(), &imageInfo, nullptr, &myImage.image);
+
+				VkMemoryRequirements memRequirements;
+				vkGetImageMemoryRequirements(_vkRenderer.GetDevice(), myImage.image, &memRequirements);
+
+				VkMemoryAllocateInfo allocInfo{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+				allocInfo.allocationSize = memRequirements.size;
+				allocInfo.memoryTypeIndex = FindMemoryType(_vkRenderer, memRequirements.memoryTypeBits, _properties);
+
+				// TODO: Error Handler
+				VkResult result;
+				result = vkAllocateMemory(_vkRenderer.GetDevice(), &allocInfo, nullptr, &myImage.memory);
+				result = vkBindImageMemory(_vkRenderer.GetDevice(), myImage.image, myImage.memory, 0);
+
+				myImage.imageView = VK_NULL_HANDLE;
+				myImage.sampler = VK_NULL_HANDLE;
+
+				return myImage;
+			}
+			ImageWrap CreateBufferImage(const VulkanRenderer& _vkRenderer, VkExtent2D& _size)
+			{
+				// TODO: SHould I handle mipmap things???
+				//uint mipLevels = std::floor(std::log2(std::max(texWidth, texHeight))) + 1;
+				uint mipLevels = 1;
+
+				ImageWrap myImage = CreateImageWrap(_vkRenderer,
+					_size.width, _size.height, VK_FORMAT_R32G32B32A32_SFLOAT,
+					VK_IMAGE_USAGE_TRANSFER_DST_BIT
+					| VK_IMAGE_USAGE_SAMPLED_BIT
+					| VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+					| VK_IMAGE_USAGE_STORAGE_BIT
+					| VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+					mipLevels);
+
+				myImage.imageView = CreateImageView(_vkRenderer, myImage.image, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
+				myImage.sampler = CreateTextureSampler(_vkRenderer);
+				myImage.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+				return myImage;
 			}
 		}
 	}

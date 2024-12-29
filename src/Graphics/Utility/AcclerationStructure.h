@@ -2,7 +2,7 @@
 
 #include <vulkan/vulkan.hpp>
 
-#include "Renderer/Buffer.h"
+#include "Graphics/Buffer.h"
 
 namespace MilkShake
 {

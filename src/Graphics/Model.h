@@ -21,7 +21,7 @@ namespace MilkShake
 {
 	namespace Graphics
 	{
-		class VKRenderer;
+		class VulkanRenderer;
 
 		struct VertexObject
 		{
@@ -74,7 +74,7 @@ namespace MilkShake
 			public:
 				Model(int _id, std::string _name);
 				~Model();
-				void LoadModel(VKRenderer& _vkRenderer, VkCommandPool& _commandPool, const std::filesystem::path& _filePath);
+				void LoadModel(VulkanRenderer& _vkRenderer, VkCommandPool& _commandPool, const std::filesystem::path& _filePath);
 
 				const std::vector<VertexObject>& GetVertices() const { return m_Vertices; }
 				const std::vector<uint32_t>& GetIndices() const { return m_Indices; }

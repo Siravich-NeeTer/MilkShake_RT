@@ -10,13 +10,13 @@ namespace MilkShake
 {
 	namespace Graphics
 	{
-		class VKRenderer;
+		class VulkanRenderer;
 
 		class Texture : public IAsset
 		{
 			public:
-				Texture(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, int _id, std::string _name);
-				Texture(const VKRenderer& _vkRenderer, const VkCommandPool& _commandPool, const std::filesystem::path& _texturePath, int _id, std::string _name);
+				Texture(const VulkanRenderer& _vkRenderer, const VkCommandPool& _commandPool, int _id, std::string _name);
+				Texture(const VulkanRenderer& _vkRenderer, const VkCommandPool& _commandPool, const std::filesystem::path& _texturePath, int _id, std::string _name);
 				~Texture();
 
 				void LoadTexture(const std::filesystem::path& _path);
@@ -27,7 +27,7 @@ namespace MilkShake
 				const VkSampler& GetSampler() const { return m_Sampler; }
 
 			private:
-				const VKRenderer& m_VKRendererRef;
+				const VulkanRenderer& m_VulkanRendererRef;
 				const VkCommandPool& m_CommandPoolRef;
 
 				int m_Width, m_Height;

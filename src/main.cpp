@@ -1,14 +1,16 @@
-#include "Renderer/VKRenderer.h"
+#include "Core/MilkShakeEngine.h"
 
 using namespace MilkShake;
 
 int main()
 {
-    Graphics::VKRenderer renderer;
+    MilkShake::Core::MilkShakeEngine engine;
 
     try 
     {
-        renderer.Run();
+        engine.Init();
+        engine.Update();
+        engine.Destroy();
     }
     catch (const std::exception& e) 
     {

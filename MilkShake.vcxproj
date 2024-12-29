@@ -158,14 +158,16 @@ copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mt.dll" "$(OutDi
     <ClCompile Include="External Libraries\imgui\implot_items.cpp" />
     <ClCompile Include="External Libraries\stb\stb_image.cpp" />
     <ClCompile Include="src\Camera.cpp" />
+    <ClCompile Include="src\Core\MilkShakeEngine.cpp" />
     <ClCompile Include="src\Input.cpp" />
     <ClCompile Include="src\main.cpp" />
-    <ClCompile Include="src\Renderer\Buffer.cpp" />
-    <ClCompile Include="src\Renderer\Descriptor.cpp" />
-    <ClCompile Include="src\Renderer\Model.cpp" />
-    <ClCompile Include="src\Renderer\Texture.cpp" />
-    <ClCompile Include="src\Renderer\Utilities\VKUtilities.cpp" />
-    <ClCompile Include="src\Renderer\VKRenderer.cpp" />
+    <ClCompile Include="src\Graphics\Buffer.cpp" />
+    <ClCompile Include="src\Graphics\Descriptor.cpp" />
+    <ClCompile Include="src\Graphics\Model.cpp" />
+    <ClCompile Include="src\Graphics\Texture.cpp" />
+    <ClCompile Include="src\Graphics\Utility\Shader.cpp" />
+    <ClCompile Include="src\Graphics\Utility\VulkanHelper.cpp" />
+    <ClCompile Include="src\Graphics\VulkanRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="assets\shaders\shared_structs.h" />
@@ -183,18 +185,22 @@ copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mt.dll" "$(OutDi
     <ClInclude Include="External Libraries\imgui\imstb_truetype.h" />
     <ClInclude Include="External Libraries\stb\stb_image.h" />
     <ClInclude Include="src\Camera.h" />
+    <ClInclude Include="src\Core\MilkShakeEngine.h" />
+    <ClInclude Include="src\Graphics\Utility\GraphicsUtility.h" />
     <ClInclude Include="src\Input.h" />
     <ClInclude Include="src\Math\AssimpGLMHelpers.h" />
-    <ClInclude Include="src\Renderer\Buffer.h" />
-    <ClInclude Include="src\Renderer\Descriptor.h" />
-    <ClInclude Include="src\Renderer\IAsset.h" />
-    <ClInclude Include="src\Renderer\Material.h" />
-    <ClInclude Include="src\Renderer\Model.h" />
-    <ClInclude Include="src\Renderer\Texture.h" />
-    <ClInclude Include="src\Renderer\Utilities\AcclerationStructure.h" />
-    <ClInclude Include="src\Renderer\Utilities\VKUtilities.h" />
-    <ClInclude Include="src\Renderer\Utilities\VKValidation.h" />
-    <ClInclude Include="src\Renderer\VKRenderer.h" />
+    <ClInclude Include="src\Graphics\Buffer.h" />
+    <ClInclude Include="src\Graphics\Descriptor.h" />
+    <ClInclude Include="src\Graphics\IAsset.h" />
+    <ClInclude Include="src\Graphics\ImageWrap.h" />
+    <ClInclude Include="src\Graphics\Material.h" />
+    <ClInclude Include="src\Graphics\Model.h" />
+    <ClInclude Include="src\Graphics\Texture.h" />
+    <ClInclude Include="src\Graphics\Utility\AcclerationStructure.h" />
+    <ClInclude Include="src\Graphics\Utility\Shader.h" />
+    <ClInclude Include="src\Graphics\Utility\VulkanHelper.h" />
+    <ClInclude Include="src\Graphics\Utility\VKValidation.h" />
+    <ClInclude Include="src\Graphics\VulkanRenderer.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="assets\shaders\anyhit.rahit" />

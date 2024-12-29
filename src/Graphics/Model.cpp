@@ -1,9 +1,9 @@
 #include "Model.h"
 
 #include "Math/AssimpGLMHelpers.h"
-#include "Utilities/VKUtilities.h"
+#include "Utility/GraphicsUtility.h"
 
-#include "VKRenderer.h"
+#include "VulkanRenderer.h"
 
 namespace MilkShake
 {
@@ -25,7 +25,7 @@ namespace MilkShake
 			m_VertexBuffer.Destroy();
 			m_IndexBuffer.Destroy();
 		}
-		void Model::LoadModel(VKRenderer& _vkRenderer, VkCommandPool& _commandPool, const std::filesystem::path& _filePath)
+		void Model::LoadModel(VulkanRenderer& _vkRenderer, VkCommandPool& _commandPool, const std::filesystem::path& _filePath)
 		{
 			Assimp::Importer importer;
 			const aiScene* scene = importer.ReadFile(_filePath.string(),

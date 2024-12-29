@@ -35,9 +35,9 @@
 
 #include "Descriptor.h"
 
-#include "Utilities/VKUtilities.h"
-#include "Utilities/VKValidation.h"
-#include "Utilities/AcclerationStructure.h"
+#include "Utility/GraphicsUtility.h"
+#include "Utility/VKValidation.h"
+#include "Utility/AcclerationStructure.h"
 
 namespace MilkShake
 {
@@ -101,15 +101,21 @@ namespace MilkShake
             alignas(16) glm::mat4 proj;
         };
 
-        class VKRenderer
+        class VulkanRenderer
         {
             public:
-                void Run()
+                void Init()
                 {
                     InitWindow();
                     InitVulkan();
                     InitImGui();
+                }
+                void Run()
+                {
                     MainLoop();
+                }
+                void Destroy()
+                {
                     Cleanup();
                 }
 
@@ -134,16 +140,11 @@ namespace MilkShake
                 std::vector<VkFramebuffer> m_SwapChainFramebuffers;
 
                 VkRenderPass m_RenderPass;
-                VkDescriptorSetLayout m_DescriptorSetLayout;
-
                 VkCommandPool m_CommandPool;
 
                 VkImage m_DepthImage;
                 VkDeviceMemory m_DepthImageMemory;
                 VkImageView m_DepthImageView;
-
-                VkDescriptorPool m_DescriptorPool;
-                std::vector<VkDescriptorSet> m_DescriptorSets;
 
                 std::vector<VkCommandBuffer> m_CommandBuffers;
 
@@ -174,7 +175,6 @@ namespace MilkShake
                 void CreateSwapChain();
                 void CreateImageViews();
                 void CreateRenderPass();
-                void CreateDescriptorSetLayout();
                 void CreateFramebuffers();
                 void CreateCommandPool();
                 void CreateDepthResources();
@@ -207,7 +207,7 @@ namespace MilkShake
                 // - Callback Functions
                 static void FramebufferResizeCallback(GLFWwindow* window, int width, int height)
                 {
-                    auto app = reinterpret_cast<VKRenderer*>(glfwGetWindowUserPointer(window));
+                    auto app = reinterpret_cast<VulkanRenderer*>(glfwGetWindowUserPointer(window));
                     app->m_FramebufferResized = true;
                 }
             // Getter & Setter (Vulkan-Core Component)
@@ -222,12 +222,22 @@ namespace MilkShake
             private:
                 void CreatePostDescriptor();
                 void CreatePostPipeline();
+                void CreatePostRenderPass();
+                void CreatePostUniformBuffer();
+
+                void UpdatePostDescriptor();
+                void UpdatePostProcessUniformData();
+
+                void CleanupPostProcess();
+                void CleanupImGui();
 
                 VkPipelineLayout m_PostPipelineLayout;
                 VkPipeline m_PostPipeline;
                 VkRenderPass m_PostRenderPass;
                 Descriptor m_PostDescriptor;
-
+                VkSampler m_PostSampler;
+                Buffer m_PostUniformBuffer;
+                PostProcessData m_PostProcessData;
 
             // Loading Model & Texture Stuff
             public:
@@ -366,6 +376,8 @@ namespace MilkShake
             private:
                 void InitImGui();
                 void RenderImGui(size_t imageIndex);
+
+                VkDescriptorPool m_ImGuiPool;
         };
     }
 }
