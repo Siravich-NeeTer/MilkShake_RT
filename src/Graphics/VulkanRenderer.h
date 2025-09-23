@@ -290,6 +290,12 @@ namespace MilkShake
                 VkDeviceMemory m_StorageImageMemory;
                 VkImageView m_StorageImageView;
 
+                VkTransformMatrixKHR transformMatrix = {
+                    1.0f, 0.0f, 0.0f, 0.0f,
+                    0.0f, 1.0f, 0.0f, 0.0f,
+                    0.0f, 0.0f, 1.0f, 0.0f
+                };
+
                 Buffer m_RtVertexBuffer;
                 Buffer m_RtIndexBuffer;
                 uint32_t m_RtIndexCount{ 0 };
@@ -340,6 +346,7 @@ namespace MilkShake
                 AccelerationStructure CreateBottomLevelAccelerationStructure(Model* model);
                 // The top level acceleration structure contains the scene's object instances
                 void CreateTopLevelAccelerationStructure();
+                void UpdateTopLevelAccelerationStructure();
 
                 /*
                     Create the Shader Binding Tables that binds the programs and top-level acceleration structure

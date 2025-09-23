@@ -813,7 +813,7 @@ namespace MilkShake
         {
             for (const auto& availableFormat : availableFormats)
             {
-                if (availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+                if (availableFormat.format == VK_FORMAT_R8G8B8A8_UNORM && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
                 {
                     return availableFormat;
                 }
@@ -897,9 +897,11 @@ namespace MilkShake
             }
 
             VkPhysicalDeviceFeatures supportedFeatures;
+            VkPhysicalDeviceProperties supportedProperties;
+            vkGetPhysicalDeviceProperties(device, &supportedProperties);
             vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
 
-            return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
+            return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy && supportedProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
         }
         bool VulkanRenderer::CheckDeviceExtensionSupport(VkPhysicalDevice device)
         {
@@ -1139,7 +1141,7 @@ namespace MilkShake
         {
             std::array<VkAttachmentDescription, 2> attachments{};
             // Color attachment
-            attachments[0].format = VK_FORMAT_B8G8R8A8_UNORM;
+            attachments[0].format = VK_FORMAT_R8G8B8A8_UNORM;
             attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
             attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
             attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
@@ -1518,6 +1520,7 @@ namespace MilkShake
                             geometry.geometry.triangles.indexData = indexBufferDeviceAddress;
                             geometry.geometry.triangles.transformData = transformBufferDeviceAddress;
                             geometries.push_back(geometry);
+
                             maxPrimitiveCounts.push_back(primitive.indexCount / 3);
                             maxPrimCount += primitive.indexCount / 3;
 
@@ -1617,12 +1620,6 @@ namespace MilkShake
         }
         void VulkanRenderer::CreateTopLevelAccelerationStructure()
         {
-            VkTransformMatrixKHR transformMatrix = {
-                1.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 1.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 1.0f, 0.0f 
-            };
-
             size_t BLAS_Count = m_BottomLevelAS.size();
             std::vector<VkAccelerationStructureInstanceKHR> instances(BLAS_Count);
             for (size_t i = 0; i < BLAS_Count; i++)
@@ -1662,7 +1659,7 @@ namespace MilkShake
             VkAccelerationStructureBuildGeometryInfoKHR acclerationStructureBuildGeometryInfo{};
             acclerationStructureBuildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
             acclerationStructureBuildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-            acclerationStructureBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+            acclerationStructureBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
             acclerationStructureBuildGeometryInfo.geometryCount = 1;
             acclerationStructureBuildGeometryInfo.pGeometries = &accelerationStructureGeometry;
 
@@ -1691,7 +1688,7 @@ namespace MilkShake
             VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo{};
             accelerationBuildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
             accelerationBuildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-            accelerationBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+            accelerationBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
             accelerationBuildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
             accelerationBuildGeometryInfo.dstAccelerationStructure = m_TopLevelAS.handle;
             accelerationBuildGeometryInfo.geometryCount = 1;
@@ -1705,6 +1702,99 @@ namespace MilkShake
             accelerationStructureBuildRangeInfo.transformOffset = 0;
             std::vector<VkAccelerationStructureBuildRangeInfoKHR*> acclerationBuildStructureRangeInfos = { &accelerationStructureBuildRangeInfo };
             
+            // Build the acceleration structure on the device via a one-time command buffer submission
+            // Some implementations may support acceleration structure building on the host (VkPhysicalDeviceAccelerationStructureFeaturesKHR->accelerationStructureHostCommands), but we prefer device builds
+            VkCommandBuffer commandBuffer = Utility::BeginSingleTimeCommands(*this, m_CommandPool);
+            vkCmdBuildAccelerationStructuresKHR(
+                commandBuffer,
+                1,
+                &accelerationBuildGeometryInfo,
+                acclerationBuildStructureRangeInfos.data());
+            Utility::EndSingleTimeCommands(*this, m_CommandPool, commandBuffer);
+
+            VkAccelerationStructureDeviceAddressInfoKHR accelerationDeviceAddressInfo{};
+            accelerationDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+            accelerationDeviceAddressInfo.accelerationStructure = m_TopLevelAS.handle;
+
+            DeleteScratchBuffer(scratchBuffer);
+            instancesBuffer.Destroy();
+        }
+        void VulkanRenderer::UpdateTopLevelAccelerationStructure()
+        {
+            size_t BLAS_Count = m_BottomLevelAS.size();
+            std::vector<VkAccelerationStructureInstanceKHR> instances(BLAS_Count);
+            for (size_t i = 0; i < BLAS_Count; i++)
+            {
+                instances[i].transform = transformMatrix;
+                instances[i].instanceCustomIndex = m_BLAS_GeometryNodeOffsets[i];
+                instances[i].mask = 0xFF;
+                instances[i].instanceShaderBindingTableRecordOffset = 0;
+                instances[i].flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+                instances[i].accelerationStructureReference = m_BottomLevelAS[i].deviceAddress;
+            }
+
+            Buffer instancesBuffer{};
+            // Buffer for instance data
+            Utility::CreateBuffer(*this,
+                VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                &instancesBuffer,
+                BLAS_Count * sizeof(VkAccelerationStructureInstanceKHR),
+                instances.data());
+
+            VkDeviceOrHostAddressConstKHR instanceDataDeviceAddress{};
+            instanceDataDeviceAddress.deviceAddress = GetBufferDeviceAddress(instancesBuffer.buffer);
+
+            VkAccelerationStructureGeometryKHR accelerationStructureGeometry{};
+            accelerationStructureGeometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+            accelerationStructureGeometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+            accelerationStructureGeometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+            accelerationStructureGeometry.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+            accelerationStructureGeometry.geometry.instances.arrayOfPointers = VK_FALSE;
+            accelerationStructureGeometry.geometry.instances.data = instanceDataDeviceAddress;
+
+            // Get size info
+            /*
+                The pSrcAccelerationStructure, dstAccelerationStructure, and mode members of pBuildInfo are ignored. Any VkDeviceOrHostAddressKHR members of pBuildInfo are ignored by this command, except that the hostAddress member of VkAccelerationStructureGeometryTrianglesDataKHR::transformData will be examined to check if it is NULL.*
+            */
+            VkAccelerationStructureBuildGeometryInfoKHR acclerationStructureBuildGeometryInfo{};
+            acclerationStructureBuildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+            acclerationStructureBuildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+            acclerationStructureBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR;
+            acclerationStructureBuildGeometryInfo.geometryCount = 1;
+            acclerationStructureBuildGeometryInfo.pGeometries = &accelerationStructureGeometry;
+
+            uint32_t primitiveCount = BLAS_Count;
+
+            VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo{};
+            accelerationStructureBuildSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+            vkGetAccelerationStructureBuildSizesKHR(m_Device,
+                VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+                &acclerationStructureBuildGeometryInfo,
+                &primitiveCount,
+                &accelerationStructureBuildSizesInfo);
+
+            // Create a small scratch buffer used during build of the top level acceleration structure
+            ScratchBuffer scratchBuffer = CreateScratchBuffer(accelerationStructureBuildSizesInfo.buildScratchSize);
+
+            VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo{};
+            accelerationBuildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+            accelerationBuildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+            accelerationBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
+            accelerationBuildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR;
+            accelerationBuildGeometryInfo.srcAccelerationStructure = m_TopLevelAS.handle;
+            accelerationBuildGeometryInfo.dstAccelerationStructure = m_TopLevelAS.handle;
+            accelerationBuildGeometryInfo.geometryCount = 1;
+            accelerationBuildGeometryInfo.pGeometries = &accelerationStructureGeometry;
+            accelerationBuildGeometryInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
+
+            VkAccelerationStructureBuildRangeInfoKHR accelerationStructureBuildRangeInfo{};
+            accelerationStructureBuildRangeInfo.primitiveCount = BLAS_Count;
+            accelerationStructureBuildRangeInfo.primitiveOffset = 0;
+            accelerationStructureBuildRangeInfo.firstVertex = 0;
+            accelerationStructureBuildRangeInfo.transformOffset = 0;
+            std::vector<VkAccelerationStructureBuildRangeInfoKHR*> acclerationBuildStructureRangeInfos = { &accelerationStructureBuildRangeInfo };
+
             // Build the acceleration structure on the device via a one-time command buffer submission
             // Some implementations may support acceleration structure building on the host (VkPhysicalDeviceAccelerationStructureFeaturesKHR->accelerationStructureHostCommands), but we prefer device builds
             VkCommandBuffer commandBuffer = Utility::BeginSingleTimeCommands(*this, m_CommandPool);
@@ -1996,7 +2086,20 @@ namespace MilkShake
 
         void VulkanRenderer::UpdateRayTracingUniformBuffer()
         {
-            
+            // TODO: If object moved, Accumulation will not work
+            /*
+            static auto startTime = std::chrono::high_resolution_clock::now();
+
+            auto currentTime = std::chrono::high_resolution_clock::now();
+            float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+            transformMatrix.matrix[0][3] = sin(time);
+            transformMatrix.matrix[1][1] = sin(time * 0.1f);
+            transformMatrix.matrix[2][2] = sin(time * 0.1f);
+
+            UpdateTopLevelAccelerationStructure();
+            */
+
             glm::mat4 view = m_Camera.GetViewMatrix();
             glm::mat4 proj = glm::perspective(glm::radians(45.0f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height, 0.1f, 10.0f);
             proj[1][1] *= -1;
