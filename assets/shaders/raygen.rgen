@@ -1,86 +1,274 @@
-/* Copyright (c) 2023, Sascha Willems
- *
- * SPDX-License-Identifier: MIT
- *
- */
-
 #version 460
-#extension GL_EXT_ray_tracing : enable
+#extension GL_EXT_ray_tracing : require
 #extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_nonuniform_qualifier : require
+#extension GL_EXT_buffer_reference2 : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
+// -----------------------------------------------------------------------------
 #include "shared_structs.h"
+#include "bufferreferences.glsl"
+#include "random.glsl"
+// -----------------------------------------------------------------------------
 
+#define PI 3.14159265358979323846
+const float EPS = 1e-6;
+
+// descriptors
 layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 0, binding = 1, rgba8) uniform image2D image;
-layout(set = 0, binding = 2) uniform CameraProperties 
-{
-	mat4 viewInverse;
-	mat4 projInverse;
-	uint frame;
+layout(set = 0, binding = 2) uniform CameraProperties {
+    mat4 viewInverse;
+    mat4 projInverse;
+    uint frame;
 } cam;
 
+// TODO: Merge GeometryNode into single file instead of multiple declaration
+struct GeometryNode {
+    uint64_t vertexBufferDeviceAddress;
+    uint64_t indexBufferDeviceAddress;
+    int      textureIndexBaseColor;
+    int      textureIndexOcclusion; // unused here
+
+    vec3 diffuse;
+    vec3 specular;
+    vec3 emission;
+    float shininess;
+};
+
+// TODO: Merge Emitter into single file instead of multiple declaration
+struct Emitter {
+    vec3  point;
+    vec3  v0, v1, v2;
+    vec3  emission;
+    vec3  normal;
+    float area;
+};
+
+layout(set = 0, binding = 3) buffer EmitterList  { Emitter      list[]; } emitter;
+layout(set = 0, binding = 4) buffer GeometryNodes{ GeometryNode nodes[]; } geometryNodes;
+layout(set = 0, binding = 5) uniform sampler2D textures[];
+
+// -----------------------------------------------------------------------------
 layout(location = 0) rayPayloadEXT RayPayload payload;
-layout(location = 3) rayPayloadEXT uint payloadSeed;
+// -----------------------------------------------------------------------------
 
-#include "random.glsl"
+// local structs
+struct Vertex {
+    vec3 pos;
+    vec3 normal;
+    vec2 uv;
+};
+struct Triangle {
+    Vertex vertices[3];
+};
 
-void main() 
+// BRDF helpers ---------------------------------------------------------------
+vec3 SampleLobe(vec3 A, float c, float phi) {
+    float s = sqrt(max(0.0, 1.0 - c*c));
+    vec3 K = vec3(s * cos(phi), s * sin(phi), c);
+
+    if (abs(A.z - 1.0) < 1e-3) return K;
+    if (abs(A.z + 1.0) < 1e-3) return vec3(K.x, -K.y, -K.z);
+
+    vec3 B = normalize(vec3(-A.y, A.x, 0.0)); // Z x A
+    vec3 C = cross(A, B);
+    return K.x * B + K.y * C + K.z * A;
+}
+
+vec3 SampleBrdf(inout uint seed, in vec3 N) {
+    // cosine-weighted hemisphere around N
+    float u1 = rnd(seed);
+    float u2 = rnd(seed);
+    return SampleLobe(N, sqrt(u1), 2.0 * PI * u2);
+}
+
+float PdfBrdf(vec3 N, vec3 Wi) {
+    float NL = max(dot(N, Wi), 0.0);
+    return NL / PI;
+}
+
+// Cook-Torrance -------------------------------------------------------
+vec3 EvalBrdf(vec3 N, vec3 L, vec3 V, Material mat)
 {
-	uint seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, cam.frame);
-    
-	float r1 = rnd(seed);
-    float r2 = rnd(seed);
+    vec3 Kd = mat.diffuse;
+    vec3 Ks = clamp(mat.specular, vec3(0.0), vec3(1.0));
+    float alpha = max(mat.shininess, EPS);
 
-    // Subpixel jitter: send the ray through a different position inside the pixel
-    // each time, to provide antialiasing.
-    vec2 subpixel_jitter = cam.frame == 0 ? vec2(0.5f, 0.5f) : vec2(r1, r2);
-    const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + subpixel_jitter;
-    const vec2 inUV        = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
-    vec2       d           = inUV * 2.0 - 1.0;
+    vec3 H  = normalize(L + V);
+    float LH = clamp(dot(L, H), -1.0, 1.0);
+    float NV = clamp(dot(N, V), -1.0, 1.0);
+    float NL = clamp(dot(N, L), -1.0, 1.0);
+    float mN = clamp(dot(H, N), -1.0, 1.0);
 
-	// const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
-	// const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeEXT.xy);
-	// vec2 d = inUV * 2.0 - 1.0;
+    float mNabs = max(abs(mN), EPS);
+    float NVabs = max(abs(NV), EPS);
+    float NLabs = max(abs(NL), EPS);
 
-	vec4 origin = cam.viewInverse * vec4(0,0,0,1);
-	vec4 target = cam.projInverse * vec4(d.x, d.y, 1, 1) ;
-	vec4 direction = cam.viewInverse*vec4(normalize(target.xyz), 0.0) ;
+    // Fresnel (Schlick)
+    vec3 F = Ks + (vec3(1.0) - Ks) * pow(clamp(1.0 - LH, 0.0, 1.0), 5.0);
 
-	float tmin = 0.001;
-	float tmax = 10000.0;
+    float a2 = alpha * alpha;
 
-	vec3 hitValues = vec3(0.0f);
+    // Beckmann-like D term with safe tan^2
+    float tan2_m = (1.0 - mN*mN) / (mNabs*mNabs);
+    float D = mNabs * a2 / (PI * pow(mNabs, 4.0) * pow(a2 + tan2_m, 2.0));
 
-	const int samples = 1;
+    // Smith G (approximated)
+    float tan2_v = (1.0 - NV*NV) / (NVabs*NVabs);
+    float tan2_l = (1.0 - NL*NL) / (NLabs*NLabs);
+    float GV = 2.0 / (1.0 + sqrt(1.0 + a2 * tan2_v));
+    float GL = 2.0 / (1.0 + sqrt(1.0 + a2 * tan2_l));
+    float G  = GV * GL;
 
-	payloadSeed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, cam.frame);
-	traceRayEXT(topLevelAS, 
-		gl_RayFlagsNoneEXT,
-		0xff, 
-		0, 
-		0, 
-		0, 
-		origin.xyz, 
-		tmin, 
-		direction.xyz, 
-		tmax, 
-		0);			// layout(location = 0) RayPayload
+    vec3  spec  = (D * G * F) / max(4.0 * NLabs * NVabs, EPS);
+    vec3  diff  = Kd / PI;
 
-	// imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(hitValues / float(samples), 0.0));
+    return max(NL, 0.0) * (diff + spec);
+}
 
-	// TODO: Display actual Color
-	vec3 hitVal = hitValues / float(samples);
-	hitVal = payload.color;
+// Light Sampling -------------------------------------------------------------
+vec3 SampleTriangle(inout uint seed, vec3 A, vec3 B, vec3 C) {
+    float b2 = rnd(seed);
+    float b1 = rnd(seed);
+    float b0 = 1.0 - b1 - b2;
+    if (b0 < 0.0) { b1 = 1.0 - b1; b2 = 1.0 - b2; b0 = 1.0 - b1 - b2; }
+    return b0*A + b1*B + b2*C;
+}
 
-	if(cam.frame > 0)
-	{
-		float a         = 1.0f / float(cam.frame + 1);
-		vec3  old_color = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
-		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(mix(old_color, hitVal, a), 1.f));
-	}
-	else
-	{
-		// First frame, replace the value in the buffer
-		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(hitVal, 1.f));
-	}
+Emitter SampleLight(inout uint seed) {
+    Emitter L = emitter.list[uint(rnd(seed) * emitter.list.length())];
+    L.point = SampleTriangle(seed, L.v0, L.v1, L.v2);
+    return L;
+}
+
+float PdfLight(Emitter L) {
+    return 1.0 / (L.area * emitter.list.length());
+}
+
+// Fetch HitObjectData ------------------------------------------------------
+void GetHitObjectData(out Material material, out vec3 outNormal)
+{
+    Triangle tri;
+    uint triIndex = payload.primitiveIndex * 3u;
+
+    // IMPORTANT: one GeometryNode per instance
+    GeometryNode geometryNode = geometryNodes.nodes[payload.instanceIndex + payload.geometryIndex];
+
+    Indices  indices  = Indices(geometryNode.indexBufferDeviceAddress);
+    Vertices vertices = Vertices(geometryNode.vertexBufferDeviceAddress);
+
+    for (uint i = 0; i < 3; i++) 
+    {
+        uint idx    = indices.i[triIndex + i];
+        uint offset = idx * 2;
+        vec4 d0 = vertices.v[offset + 0]; // pos.xyz, n.x
+        vec4 d1 = vertices.v[offset + 1]; // n.yz, uv.xy
+        tri.vertices[i].pos    = d0.xyz;
+        tri.vertices[i].normal = vec3(d0.w, d1.xy);
+        tri.vertices[i].uv     = d1.zw;
+    }
+
+    vec2 uv = tri.vertices[0].uv * payload.bc.x
+            + tri.vertices[1].uv * payload.bc.y
+            + tri.vertices[2].uv * payload.bc.z;
+
+    // use computed uv (tri.uv was never set before)
+    material.diffuse = texture(textures[nonuniformEXT(geometryNode.textureIndexBaseColor)], uv).rgb * geometryNode.diffuse;
+
+    material.specular  = geometryNode.specular;
+    material.emission  = geometryNode.emission;
+    material.shininess = geometryNode.shininess;
+
+    outNormal = normalize(tri.vertices[0].normal * payload.bc.x
+                        + tri.vertices[1].normal * payload.bc.y
+                        + tri.vertices[2].normal * payload.bc.z);
+    payload.color = vec3(uv, 0.0f);
+}
+
+// raygen ---------------------------------------------------------------------
+void main()
+{
+    // RNG seed per pixel, per frame
+    uint seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, cam.frame);
+
+    // subpixel jitter for AA
+    vec2 subpixel = (cam.frame == 0) ? vec2(0.5) : vec2(rnd(seed), rnd(seed));
+    vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + subpixel;
+    vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
+    vec2 d = inUV * 2.0 - 1.0;
+
+    vec3 target      = vec3(cam.projInverse * vec4(d.x, d.y, 1.0, 1.0));
+    vec3 rayOrigin   = vec3(cam.viewInverse * vec4(0, 0, 0, 1));
+    vec3 rayDir      = vec3(cam.viewInverse * vec4(normalize(target), 0.0));
+
+    float tmin = 0.001;
+    float tmax = 10000.0;
+
+    vec3 C = vec3(0.0);
+    vec3 W = vec3(1.0);
+
+    const int maxDepth = 4;
+    for (int depth = 0; depth < maxDepth; depth++)
+    {
+        // init payload for this trace
+        payload.hit            = false;
+        payload.primitiveIndex = 0;
+        payload.instanceIndex  = 0;
+        payload.bc             = vec3(0.0);
+        payload.hitPos         = vec3(0.0);
+
+        traceRayEXT(
+            topLevelAS,
+            gl_RayFlagsOpaqueEXT,
+            0xFF,
+            0, 0, 0,
+            rayOrigin, tmin,
+            rayDir,   tmax,
+            0
+        );
+
+        if (!payload.hit) 
+            break;
+
+        Material mat;
+        vec3 N;
+        GetHitObjectData(mat, N);
+        
+        // emissive hit?
+        if (dot(mat.emission, mat.emission) > 0.0) 
+        {
+            C += mat.emission * W;
+            break;
+        }
+
+        // BRDF Sample
+        vec3 P  = payload.hitPos;
+        vec3 Wi = SampleBrdf(seed, N); // new direction
+        vec3 Wo = -rayDir;
+
+        vec3 f = EvalBrdf(N, Wi, Wo, mat);
+        float p = PdfBrdf(N, Wi) * 0.8; // scale if you mix lobes; here only cosine
+
+        if (p < 1e-6) 
+            break;
+
+        W *= f / p;
+
+        rayOrigin = P;
+        rayDir    = Wi;
+    }
+
+    // Accumulate
+    if (cam.frame > 0) 
+    {
+        float a = 1.0 / float(cam.frame + 1);
+        vec3 oldc = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
+        imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(mix(oldc, C, a), 1.0));
+    } 
+    else 
+    {
+        imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(C, 1.0));
+    }
 }

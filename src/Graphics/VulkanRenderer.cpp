@@ -40,6 +40,7 @@ namespace MilkShake
             CreateSyncObjects();
             
             LoadModel("assets/models/Sponza/Sponza.gltf");
+            LoadLightModel("assets/models/bunny.obj");
 
             InitRayTracing();
 
@@ -1244,6 +1245,22 @@ namespace MilkShake
             m_Models.push_back(newModel);
             return id;
         }
+        int VulkanRenderer::LoadLightModel(const std::filesystem::path& _filePath)
+        {
+            int newModelID = LoadModel(_filePath);
+            m_EmitterModels.push_back(m_Models[newModelID]);
+
+            for (int materialID : m_Models[newModelID]->GetMaterialIDs())
+            {
+                // TODO: Make material component adjustable instead of MAGIC NUMBER
+                Material& material = m_MaterialsMap[materialID];
+                material.emission = glm::vec3(5.0f);
+                material.shininess = 0.0f;
+            }
+            m_Models[newModelID]->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 3.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(10.0f));
+
+            return newModelID;
+        }
         int VulkanRenderer::LoadTexture(const std::filesystem::path& _filePath)
         {
             auto targetTexture = m_TexturesMap.find(_filePath);
@@ -1301,6 +1318,7 @@ namespace MilkShake
                 CreateBottomLevelAccelerationStructure(model);
             }
             CreateTopLevelAccelerationStructure();
+            CreateEmitterBuffer();
 
             CreateStorageImage();
             CreateRayTracingUniformBuffer();
@@ -1335,6 +1353,7 @@ namespace MilkShake
             m_ShaderBindingTables.hit.Destroy();
 
             m_RtUniformBuffer.Destroy();
+            m_EmitterBuffer.Destroy();
             m_GeometryNodesBuffer.Destroy();
         }
         
@@ -1467,7 +1486,7 @@ namespace MilkShake
                         if (primitive.indexCount > 0)
                         {
                             VkTransformMatrixKHR transformMatrix{};
-                            auto m = glm::mat3x4(glm::transpose(node->GetWorldMatrix()));
+                            auto m = glm::mat3x4(glm::transpose(node->GetWorldMatrix() * model->transform));
                             memcpy(&transformMatrix, (void*)&m, sizeof(glm::mat3x4));
                             transformMatrices.push_back(transformMatrix);
                         }
@@ -1538,6 +1557,11 @@ namespace MilkShake
                             Material material = m_MaterialsMap[primitive.materialIndex];
                             geometryNode.textureIndexBaseColor = material.BaseColorTextureID;
                             geometryNode.textureIndexOcclusion = material.OcclusionTextureID;
+
+                            geometryNode.diffuse = material.diffuse;
+                            geometryNode.specular = material.specular;
+                            geometryNode.emission = material.emission;
+                            geometryNode.shininess = material.shininess;
 
                             geometryNodes.push_back(geometryNode);
                         }
@@ -1846,7 +1870,45 @@ namespace MilkShake
             memcpy(m_ShaderBindingTables.miss.mapped, shaderHandleStorage.data() + handleSizeAligned, handleSize * 2);
             memcpy(m_ShaderBindingTables.hit.mapped, shaderHandleStorage.data() + handleSizeAligned * 3, handleSize);
         }
-        
+
+        void VulkanRenderer::CreateEmitterBuffer()
+        {
+            for (const Model* model : m_EmitterModels)
+            {
+                const std::vector<VertexObject> vertices = model->GetVertices();
+                const std::vector<uint32_t> indices = model->GetIndices();
+                for (auto node : model->GetLinearNode())
+                {
+                    if (node->mesh.primitives.empty())
+                        continue;
+
+                    for (auto primitive : node->mesh.primitives)
+                    {
+                        for (size_t index = primitive.firstIndex; index < primitive.firstIndex + primitive.indexCount; index += 3)
+                        {
+                            Emitter emitter{};
+
+                            emitter.v0 = vertices[indices[index]].position;
+                            emitter.v1 = vertices[indices[index + 1]].position;
+                            emitter.v2 = vertices[indices[index + 2]].position;
+
+                            emitter.emission = vec3(10.0f);
+                            emitter.normal = normalize(cross(emitter.v1 - emitter.v0, emitter.v2 - emitter.v0));
+                            emitter.area = 0.5f * cross(emitter.v1 - emitter.v0, emitter.v2 - emitter.v0).length();
+
+                            m_EmitterList.emplace_back(emitter);
+                        }
+                    }
+                }
+            }
+
+            Utility::CreateBuffer(*this,
+                VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                &m_EmitterBuffer, static_cast<uint32_t>(m_EmitterList.size()) * sizeof(Emitter),
+                m_EmitterList.data());
+        }
+
         void VulkanRenderer::CreateRayTracingPipeline()
         {
             // [DONE] TODO: Added TextureCount on model
@@ -1860,12 +1922,12 @@ namespace MilkShake
                 VkDescriptorSetLayoutBinding{ 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, nullptr },
                 // Binding 2: Uniform buffer
                 VkDescriptorSetLayoutBinding{ 2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, nullptr },
-                // Binding 3: Texture image
-                VkDescriptorSetLayoutBinding{ 3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR, nullptr },
+                // Binding 3: Emitter buffer
+                VkDescriptorSetLayoutBinding{ 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, nullptr },
                 // Binding 4: Geometry node information SSBO
-                VkDescriptorSetLayoutBinding{ 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR, nullptr },
+                VkDescriptorSetLayoutBinding{ 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR, nullptr },
                 // [DONE] TODO: Binding 5: All images used by the glTF model
-                VkDescriptorSetLayoutBinding{ 5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, imageCount, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR, nullptr },
+                VkDescriptorSetLayoutBinding{ 5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, imageCount, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR, nullptr },
             };
 
             // Unbound Set
@@ -2035,6 +2097,15 @@ namespace MilkShake
                     .descriptorCount = 1,
                     .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
                     .pBufferInfo = &m_RtUniformBuffer.descriptor
+                },
+                // Binding 3: Emitter List information SSBO
+                VkWriteDescriptorSet{
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .dstSet = m_RtDescriptorSet,
+                    .dstBinding = 3,
+                    .descriptorCount = 1,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                    .pBufferInfo = &m_EmitterBuffer.descriptor
                 },
                 // Binding 4: Geometry node information SSBO
                 VkWriteDescriptorSet{

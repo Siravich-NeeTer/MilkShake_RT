@@ -1,9 +1,3 @@
-/* Copyright (c) 2023, Sascha Willems
- *
- * SPDX-License-Identifier: MIT
- *
- */
-
 #version 460
 
 #extension GL_EXT_ray_tracing : require
@@ -20,18 +14,22 @@ layout(location = 1) rayPayloadEXT bool isShadowed;
 
 hitAttributeEXT vec2 bc;
 
-layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
-layout(binding = 3, set = 0) uniform sampler2D image;
+layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 
+// TODO: Merge GeometryNode into single file instead of multiple declaration
 struct GeometryNode {
 	uint64_t vertexBufferDeviceAddress;
 	uint64_t indexBufferDeviceAddress;
 	int textureIndexBaseColor;
 	int textureIndexOcclusion;
+    
+    vec3 diffuse;
+    vec3 specular;
+    vec3 emission;
+    float shininess;
 };
-layout(binding = 4, set = 0) buffer GeometryNodes { GeometryNode nodes[]; } geometryNodes;
-
-layout(binding = 5, set = 0) uniform sampler2D textures[];
+layout(set = 0, binding = 4) buffer GeometryNodes { GeometryNode nodes[]; } geometryNodes;
+layout(set = 0, binding = 5) uniform sampler2D textures[];
 
 #include "bufferreferences.glsl"
 #include "geometrytypes.glsl"
@@ -50,10 +48,12 @@ void main()
     // gl_InstanceCustomIndexEXT will represent GeometryNodes Offset from SSBO
     payload.instanceIndex = gl_InstanceCustomIndexEXT;
     payload.primitiveIndex = gl_PrimitiveID;
-    payload.bc = vec3(1.0-bc.x-bc.y, bc.x, bc.y);
+    payload.geometryIndex = gl_GeometryIndexEXT;
+    payload.bc = vec3(1.0 - bc.x - bc.y, bc.x, bc.y);
     payload.hitPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
     payload.hitDist = gl_HitTEXT;
 
+    /*
 	Triangle tri = UnpackTriangle(gl_PrimitiveID);
 	GeometryNode geometryNode = geometryNodes.nodes[gl_InstanceCustomIndexEXT + gl_GeometryIndexEXT];
 
@@ -128,4 +128,5 @@ void main()
 
     payload.color = vec3(lightIntensity * attenuation * (diffuse + specular));
     // -------------------------------------------------------------------------------------------------------------- //
+    */
 }

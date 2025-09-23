@@ -107,6 +107,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)assets;$(SolutionDir)External Libraries;$(SolutionDir)External Libraries\vulkan\Include;$(SolutionDir)External Libraries\GLFW\include;$(SolutionDir)External Libraries\stb;$(SolutionDir)External Libraries\assimp\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -130,6 +131,7 @@ copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mtd.dll" "$(OutD
       <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)assets;$(SolutionDir)External Libraries;$(SolutionDir)External Libraries\vulkan\Include;$(SolutionDir)External Libraries\GLFW\include;$(SolutionDir)External Libraries\stb;$(SolutionDir)External Libraries\assimp\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

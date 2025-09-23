@@ -242,6 +242,7 @@ namespace MilkShake
             // Loading Model & Texture Stuff
             public:
                 int LoadModel(const std::filesystem::path& _filePath);
+                int LoadLightModel(const std::filesystem::path& _filePath);
                 int LoadTexture(const std::filesystem::path& _filePath);
                 int CreateMaterial(Material _material);
 
@@ -249,6 +250,8 @@ namespace MilkShake
                 // TODO: Deal with m_ModelsMap
                 std::vector<Model*> m_Models;
                 std::map<std::filesystem::path, Model*> m_ModelsMap;
+
+                std::vector<Model*> m_EmitterModels;
 
                 std::vector<Texture*> m_Textures;
                 std::map<std::filesystem::path, Texture*> m_TexturesMap;
@@ -315,10 +318,27 @@ namespace MilkShake
                     uint64_t indexBufferDeviceAddress;
                     int32_t textureIndexBaseColor = -1;
                     int32_t textureIndexOcclusion = -1;
+
+                    alignas(16) glm::vec3 diffuse = glm::vec3(1.0f);
+                    alignas(16) glm::vec3 specular = glm::vec3(1.0f);
+                    alignas(16) glm::vec3 emission = glm::vec3(0.0f);
+                    float shininess = 0.0f;
                 };
                 std::vector<GeometryNode> m_GeometryNodes;
                 std::vector<int> m_BLAS_GeometryNodeOffsets;
                 Buffer m_GeometryNodesBuffer;
+
+                struct Emitter
+                {
+                    alignas(16) vec3 point;         // Will use in raytrace.rgen (SampleLight)
+
+                    alignas(16) vec3 v0, v1, v2;
+                    alignas(16) vec3 emission;
+                    alignas(16) vec3 normal;
+                    float area;
+                };
+                std::vector<Emitter> m_EmitterList;
+                Buffer m_EmitterBuffer;
 
                 std::vector<VkRayTracingShaderGroupCreateInfoKHR> m_ShaderGroups{};
                 struct ShaderBindingTables
@@ -364,6 +384,8 @@ namespace MilkShake
                 */
                 void CreateShaderBindingTable(ShaderBindingTable& shaderBindingTable, uint32_t handleCount);
                 void CreateShaderBindingTables();
+
+                void CreateEmitterBuffer();
 
                 void CreateRayTracingPipeline();
                 void CreateRayTracingDescriptorSets();

@@ -85,12 +85,10 @@ namespace MilkShake
 				const Buffer& GetVertexBuffer() const { return m_VertexBuffer; }
 				const Buffer& GetIndexBuffer() const { return m_IndexBuffer; }
 
-			private:
-				/*
-				VkDevice* m_pDevice;
-				VkDescriptorPool m_DescriptorPool;
-				*/
+				// TODO: Should have better way to handling transformation (per object not per model)
+				glm::mat4 transform = glm::mat4(1.0f);
 
+			private:
 				Buffer m_VertexBuffer;
 				Buffer m_IndexBuffer;
 				std::vector<VertexObject> m_Vertices;

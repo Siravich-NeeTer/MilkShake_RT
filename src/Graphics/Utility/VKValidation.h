@@ -77,6 +77,9 @@ namespace MilkShake
 				#else
 					// Linux: 
 				#endif
+
+				if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+					assert(false);
 			}
 
 			return VK_FALSE;

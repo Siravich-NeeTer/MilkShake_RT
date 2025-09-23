@@ -23,14 +23,23 @@ struct LightComponent
     float intensity;
 };
 
+struct Material
+{
+    vec3  diffuse;
+    vec3  specular;
+    vec3  emission;
+    float shininess;
+};
+
 struct RayPayload
 {
-    uint seed;		// Used in Path Tracing step as random number seed
+    uint seed;		    // Used in Path Tracing step as random number seed
     bool hit;           // Does the ray intersect anything or not?
     float hitDist;      // Used in the denoising step
-    vec3 hitPos;	// The world coordinates of the hit point.      
+    vec3 hitPos;	    // The world coordinates of the hit point.      
     int instanceIndex;  // Index of the object instance hit (we have only one, so =0)
     int primitiveIndex; // Index of the hit triangle primitive within object
+    int geometryIndex;  // Index of the hit triangle primitive within object
     vec3 bc;            // Barycentric coordinates of the hit point within triangle
     vec3 normal;        // TODO: Temp Data
     vec3 color;

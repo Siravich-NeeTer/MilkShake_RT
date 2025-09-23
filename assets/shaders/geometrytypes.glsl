@@ -1,9 +1,3 @@
-/* Copyright (c) 2023, Sascha Willems
- *
- * SPDX-License-Identifier: MIT
- *
- */
-
 struct Vertex
 {
   vec3 pos;

@@ -47,7 +47,9 @@ namespace MilkShake
 			for (size_t i = 0; i < scene->mNumMaterials; i++)
 			{
 				aiMaterial* ai_material = scene->mMaterials[i];
+				int defaultTextureID = _vkRenderer.LoadTexture("assets/textures/null.png");
 				Material material;
+				material.BaseColorTextureID = defaultTextureID;
 
 				// TODO: Remove support only BaseColor
 				//for (int materialType = 0; materialType < aiTextureType_SPECULAR; materialType++)
@@ -75,10 +77,12 @@ namespace MilkShake
 			}
 
 			// TODO: If Model doesn't have any Material
-			/*
-			if (m_Textures.empty())
-				m_Textures.push_back(new Texture(_vkRenderer, _commandPool, "assets/models/viking_room.png"));
-			*/
+			if (scene->mNumMaterials == 0)
+			{
+				int textureID = _vkRenderer.LoadTexture("assets/textures/null.png");
+				Material material;
+				material.BaseColorTextureID = textureID;
+			}
 
 			ProcessNode(scene->mRootNode, scene, nullptr);
 

@@ -16,13 +16,17 @@ layout(location = 3) rayPayloadInEXT uint payloadSeed;
 
 hitAttributeEXT vec2 bc;
 
-layout(binding = 3, set = 0) uniform sampler2D image;
-
+// TODO: Merge GeometryNode into single file instead of multiple declaration
 struct GeometryNode {
 	uint64_t vertexBufferDeviceAddress;
 	uint64_t indexBufferDeviceAddress;
 	int textureIndexBaseColor;
 	int textureIndexOcclusion;
+	
+    vec3 diffuse;
+    vec3 specular;
+    vec3 emission;
+    float shininess;
 };
 layout(binding = 4, set = 0) buffer GeometryNodes { GeometryNode nodes[]; } geometryNodes;
 
@@ -35,7 +39,7 @@ layout(binding = 5, set = 0) uniform sampler2D textures[];
 void main()
 {
 	Triangle tri = UnpackTriangle(gl_PrimitiveID);
-	GeometryNode geometryNode = geometryNodes.nodes[gl_GeometryIndexEXT];
+	GeometryNode geometryNode = geometryNodes.nodes[gl_InstanceCustomIndexEXT + gl_GeometryIndexEXT];
 	vec4 color = texture(textures[nonuniformEXT(geometryNode.textureIndexBaseColor)], tri.uv);
 	// If the alpha value of the texture at the current UV coordinates is below a given threshold, we'll ignore this intersection
 	// That way ray traversal will be stopped and the miss shader will be invoked
