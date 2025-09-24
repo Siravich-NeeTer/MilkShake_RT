@@ -9,7 +9,7 @@ namespace MilkShake
 		int OcclusionTextureID = -1;
 
 		glm::vec3 diffuse = glm::vec3(1.0f);
-		glm::vec3 specular = glm::vec3(1.0f);
+		glm::vec3 specular = glm::vec3(0.03f);
 		glm::vec3 emission = glm::vec3(0.0f);
 		float shininess = 20.0f;
 	};

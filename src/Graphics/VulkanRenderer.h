@@ -242,7 +242,7 @@ namespace MilkShake
             // Loading Model & Texture Stuff
             public:
                 int LoadModel(const std::filesystem::path& _filePath);
-                int LoadLightModel(const std::filesystem::path& _filePath);
+                int LoadLightModel(const std::filesystem::path& _filePath, glm::mat4 _transform = glm::mat4(1.0f), glm::vec3 _lightColor = glm::vec3(5.0f));
                 int LoadTexture(const std::filesystem::path& _filePath);
                 int CreateMaterial(Material _material);
 
@@ -303,6 +303,8 @@ namespace MilkShake
                 Buffer m_RtIndexBuffer;
                 uint32_t m_RtIndexCount{ 0 };
                 std::vector<Buffer> m_RtTransformBuffers;
+                
+                PushConstantRay pcRay;
 
                 struct UniformData
                 {
@@ -351,6 +353,7 @@ namespace MilkShake
 
                 // Core Ray-Tracing Function
                 void InitRayTracing();
+                void UpdatePushConstantRay();
                 void CleanRayTracing();
 
                 // Create a scratch buffer to hold temporary data for a ray tracing acceleration structure

@@ -40,7 +40,16 @@ namespace MilkShake
             CreateSyncObjects();
             
             LoadModel("assets/models/Sponza/Sponza.gltf");
-            LoadLightModel("assets/models/bunny.obj");
+            // TODO: Implement instancing instead of duplicate models (use m_ModelsMap)
+            LoadLightModel("assets/models/bunny.obj",
+                glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 7.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(10.0f)),
+                glm::vec3(5.0f, 0.0f, 0.0f));
+            LoadLightModel("assets/models/bunny.obj",
+                glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 3.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(10.0f)),
+                glm::vec3(0.0f, 5.0f, 0.0f));
+            LoadLightModel("assets/models/bunny.obj",
+                glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(10.0f)),
+                glm::vec3(0.0f, 0.0f, 5.0f));
 
             InitRayTracing();
 
@@ -682,10 +691,7 @@ namespace MilkShake
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RtPipeline);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RtPipelineLayout, 0, 1, &m_RtDescriptorSet, 0, 0);
 
-            PushConstantRay pcRay{};
-            pcRay.lightPosition = glm::vec3(0.0f, 3.0f, 0.0f);
-            pcRay.lightIntensity = 10.0f;
-            vkCmdPushConstants(commandBuffer, m_RtPipelineLayout, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 0, sizeof(PushConstantRay), &pcRay);
+            vkCmdPushConstants(commandBuffer, m_RtPipelineLayout, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 0, sizeof(PushConstantRay), &pcRay);
 
             VkStridedDeviceAddressRegionKHR emptySbtEntry = {};
             vkCmdTraceRaysKHR(
@@ -720,6 +726,7 @@ namespace MilkShake
                 throw std::runtime_error("failed to acquire swap chain image!");
             }
 
+            UpdatePushConstantRay();
             UpdateRayTracingUniformBuffer();
 
             vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame]);
@@ -1245,7 +1252,7 @@ namespace MilkShake
             m_Models.push_back(newModel);
             return id;
         }
-        int VulkanRenderer::LoadLightModel(const std::filesystem::path& _filePath)
+        int VulkanRenderer::LoadLightModel(const std::filesystem::path& _filePath, glm::mat4 _transform, glm::vec3 _lightColor)
         {
             int newModelID = LoadModel(_filePath);
             m_EmitterModels.push_back(m_Models[newModelID]);
@@ -1254,10 +1261,10 @@ namespace MilkShake
             {
                 // TODO: Make material component adjustable instead of MAGIC NUMBER
                 Material& material = m_MaterialsMap[materialID];
-                material.emission = glm::vec3(5.0f);
+                material.emission = _lightColor;
                 material.shininess = 0.0f;
             }
-            m_Models[newModelID]->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 3.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(10.0f));
+            m_Models[newModelID]->transform = _transform;
 
             return newModelID;
         }
@@ -1325,6 +1332,18 @@ namespace MilkShake
             CreateRayTracingPipeline();
             CreateShaderBindingTables();
             CreateRayTracingDescriptorSets();
+        }
+        void VulkanRenderer::UpdatePushConstantRay()
+        {
+            pcRay.frameSeed = rand() % 32768;
+            pcRay.depth = 1;
+            const int MAX_DEPTH = 4;
+            while (float(rand()) / RAND_MAX < 0.8f)
+            {
+                pcRay.depth++;
+                if (pcRay.depth == MAX_DEPTH)
+                    break;
+            }
         }
         void VulkanRenderer::CleanRayTracing()
         {
@@ -1892,9 +1911,9 @@ namespace MilkShake
                             emitter.v1 = vertices[indices[index + 1]].position;
                             emitter.v2 = vertices[indices[index + 2]].position;
 
-                            emitter.emission = vec3(10.0f);
+                            emitter.emission = m_MaterialsMap[primitive.materialIndex].emission;
                             emitter.normal = normalize(cross(emitter.v1 - emitter.v0, emitter.v2 - emitter.v0));
-                            emitter.area = 0.5f * cross(emitter.v1 - emitter.v0, emitter.v2 - emitter.v0).length();
+                            emitter.area = 0.5f * length(cross(emitter.v1 - emitter.v0, emitter.v2 - emitter.v0));
 
                             m_EmitterList.emplace_back(emitter);
                         }
@@ -1955,7 +1974,7 @@ namespace MilkShake
             VkPushConstantRange pushConstant{};
             pushConstant.offset = 0;
             pushConstant.size = sizeof(PushConstantRay);
-            pushConstant.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+            pushConstant.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
 
             VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
             pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -2343,7 +2362,12 @@ namespace MilkShake
 
                 ImGui::NewFrame();
 
-                ImGui::ShowDemoWindow();
+                ImGui::Begin("DEBUG");
+                if (ImGui::Checkbox("Accumulation", &pcRay.accumulation))
+                    uniformData.frame = 0;
+                if (ImGui::Checkbox("Explicit", &pcRay.explicitLight))
+                    uniformData.frame = 0;
+                ImGui::End();
 
                 ImGui::Render();
                 ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), m_CommandBuffers[m_CurrentFrame]);

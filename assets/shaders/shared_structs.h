@@ -13,8 +13,17 @@ using uint = unsigned int;
 
 struct PushConstantRay
 {
-    vec3 lightPosition;
-    float lightIntensity;
+#ifdef __cplusplus
+    alignas(4) int frameSeed;
+    alignas(4) int depth;
+    alignas(4) bool accumulation;
+    alignas(4) bool explicitLight;
+#else
+    int frameSeed;
+    int depth;
+    bool accumulation;
+    bool explicitLight;
+#endif
 };
 
 struct LightComponent
@@ -41,8 +50,6 @@ struct RayPayload
     int primitiveIndex; // Index of the hit triangle primitive within object
     int geometryIndex;  // Index of the hit triangle primitive within object
     vec3 bc;            // Barycentric coordinates of the hit point within triangle
-    vec3 normal;        // TODO: Temp Data
-    vec3 color;
 };
 
 struct PostProcessData
