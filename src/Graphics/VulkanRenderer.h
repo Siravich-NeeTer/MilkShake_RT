@@ -296,6 +296,9 @@ namespace MilkShake
                 VkImage m_StorageImage;
                 VkDeviceMemory m_StorageImageMemory;
                 VkImageView m_StorageImageView;
+                VkImage m_StorageAlbedoImage;
+                VkDeviceMemory m_StorageAlbedoImageMemory;
+                VkImageView m_StorageAlbedoImageView;
                 VkImage m_StorageNormalImage;
                 VkDeviceMemory m_StorageNormalImageMemory;
                 VkImageView m_StorageNormalImageView;

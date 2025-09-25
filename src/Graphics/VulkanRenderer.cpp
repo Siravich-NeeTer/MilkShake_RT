@@ -2054,8 +2054,10 @@ namespace MilkShake
                 VkDescriptorSetLayoutBinding{ 0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, nullptr },
                 // Binding 1: Ray tracing result image
                 VkDescriptorSetLayoutBinding{ 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, nullptr },
-                // Binding 2: Ray tracing normal image
-                VkDescriptorSetLayoutBinding{ 2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, nullptr }
+                // Binding 2: Ray tracing albedo image
+                VkDescriptorSetLayoutBinding{ 2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, nullptr },
+                // Binding 3: Ray tracing normal image
+                VkDescriptorSetLayoutBinding{ 3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, nullptr }
             };
 
             VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{};
@@ -2121,6 +2123,7 @@ namespace MilkShake
             accelerationStructureWrite.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
 
             VkDescriptorImageInfo storageImageDescriptor{ VK_NULL_HANDLE, m_StorageImageView, VK_IMAGE_LAYOUT_GENERAL };
+            VkDescriptorImageInfo storageAlbedoImageDescriptor{ VK_NULL_HANDLE, m_StorageAlbedoImageView, VK_IMAGE_LAYOUT_GENERAL };
             VkDescriptorImageInfo storageNormalImageDescriptor{ VK_NULL_HANDLE, m_StorageNormalImageView, VK_IMAGE_LAYOUT_GENERAL };
             
             std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
@@ -2135,11 +2138,20 @@ namespace MilkShake
                     .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
                     .pImageInfo = &storageImageDescriptor
                 },
-                // Binding 1: Ray tracing normal image
+                // Binding 2: Ray tracing albedo image
                 VkWriteDescriptorSet{
                     .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                     .dstSet = m_RtDescriptorSet,
                     .dstBinding = 2,
+                    .descriptorCount = 1,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                    .pImageInfo = &storageAlbedoImageDescriptor
+                },
+                // Binding 3: Ray tracing normal image
+                VkWriteDescriptorSet{
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .dstSet = m_RtDescriptorSet,
+                    .dstBinding = 3,
                     .descriptorCount = 1,
                     .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
                     .pImageInfo = &storageNormalImageDescriptor
@@ -2286,6 +2298,10 @@ namespace MilkShake
                 m_StorageImageView = VK_NULL_HANDLE;
                 m_StorageImageMemory = VK_NULL_HANDLE;
 
+                m_StorageAlbedoImage = VK_NULL_HANDLE;
+                m_StorageAlbedoImageView = VK_NULL_HANDLE;
+                m_StorageAlbedoImageMemory = VK_NULL_HANDLE;
+
                 m_StorageNormalImage = VK_NULL_HANDLE;
                 m_StorageNormalImageView = VK_NULL_HANDLE;
                 m_StorageNormalImageMemory = VK_NULL_HANDLE;
@@ -2305,6 +2321,15 @@ namespace MilkShake
                 VK_IMAGE_TILING_OPTIMAL,
                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                m_StorageAlbedoImage, m_StorageAlbedoImageMemory);
+            m_StorageAlbedoImageView = CreateImageView(m_StorageAlbedoImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
+            Utility::TransitionImageLayout(*this, m_CommandPool, m_StorageAlbedoImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+
+            CreateImage(m_SwapChainExtent.width, m_SwapChainExtent.height,
+                VK_FORMAT_R16G16B16A16_SFLOAT,
+                VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                 m_StorageNormalImage, m_StorageNormalImageMemory);
             m_StorageNormalImageView = CreateImageView(m_StorageNormalImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
             Utility::TransitionImageLayout(*this, m_CommandPool, m_StorageNormalImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
@@ -2315,6 +2340,10 @@ namespace MilkShake
             vkDestroyImage(m_Device, m_StorageImage, nullptr);
             vkFreeMemory(m_Device, m_StorageImageMemory, nullptr);
 
+            vkDestroyImageView(m_Device, m_StorageAlbedoImageView, nullptr);
+            vkDestroyImage(m_Device, m_StorageAlbedoImage, nullptr);
+            vkFreeMemory(m_Device, m_StorageAlbedoImageMemory, nullptr);
+
             vkDestroyImageView(m_Device, m_StorageNormalImageView, nullptr);
             vkDestroyImage(m_Device, m_StorageNormalImage, nullptr);
             vkFreeMemory(m_Device, m_StorageNormalImageMemory, nullptr);
@@ -2324,6 +2353,7 @@ namespace MilkShake
             CreateStorageImage();
 
             VkDescriptorImageInfo storageImageDescriptor{ VK_NULL_HANDLE, m_StorageImageView, VK_IMAGE_LAYOUT_GENERAL };
+            VkDescriptorImageInfo storageAlbedoImageDescriptor{ VK_NULL_HANDLE, m_StorageAlbedoImageView, VK_IMAGE_LAYOUT_GENERAL };
             VkDescriptorImageInfo storageNormalImageDescriptor{ VK_NULL_HANDLE, m_StorageNormalImageView, VK_IMAGE_LAYOUT_GENERAL };
             VkWriteDescriptorSet resultImageWrite{};
             resultImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -2333,7 +2363,12 @@ namespace MilkShake
             resultImageWrite.pImageInfo = &storageImageDescriptor;
             resultImageWrite.descriptorCount = 1;
             vkUpdateDescriptorSets(m_Device, 1, &resultImageWrite, 0, VK_NULL_HANDLE);
-            
+
+            resultImageWrite.dstBinding = 2;
+            resultImageWrite.pImageInfo = &storageAlbedoImageDescriptor;
+            vkUpdateDescriptorSets(m_Device, 1, &resultImageWrite, 0, VK_NULL_HANDLE);
+
+            resultImageWrite.dstBinding = 3;
             resultImageWrite.pImageInfo = &storageNormalImageDescriptor;
             vkUpdateDescriptorSets(m_Device, 1, &resultImageWrite, 0, VK_NULL_HANDLE);
         }

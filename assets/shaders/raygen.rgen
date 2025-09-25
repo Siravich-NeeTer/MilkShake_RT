@@ -19,7 +19,8 @@ const float EPS = 1e-6;
 layout(push_constant) uniform _PushConstantRay { PushConstantRay pcRay; };
 layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 0, binding = 1, rgba8) uniform image2D image;
-layout(set = 0, binding = 2, rgba16) uniform image2D normalImage;
+layout(set = 0, binding = 2, rgba16) uniform image2D albedoImage;
+layout(set = 0, binding = 3, rgba16) uniform image2D normalImage;
 
 layout(set = 1, binding = 0) uniform CameraProperties {
     mat4 viewInverse;
@@ -162,7 +163,7 @@ float GeometryFactor(vec3 Pa, vec3 Na, vec3 Pb, vec3 Nb)
 }
 
 // Fetch HitObjectData ------------------------------------------------------
-void GetHitObjectData(out Material material, out vec3 outNormal)
+void GetHitObjectData(out Material material, out vec3 outAlbedo, out vec3 outNormal)
 {
     Triangle tri;
     uint triIndex = payload.primitiveIndex * 3u;
@@ -189,11 +190,17 @@ void GetHitObjectData(out Material material, out vec3 outNormal)
             + tri.vertices[2].uv * payload.bc.z;
 
     // use computed uv (tri.uv was never set before)
-    material.diffuse = texture(textures[nonuniformEXT(geometryNode.textureIndexBaseColor)], uv).rgb * geometryNode.diffuse;
+    vec3 diffuse = texture(textures[nonuniformEXT(geometryNode.textureIndexBaseColor)], uv).rgb * geometryNode.diffuse;
+    material.diffuse = diffuse;
 
     material.specular  = geometryNode.specular;
     material.emission  = geometryNode.emission;
     material.shininess = geometryNode.shininess;
+
+    if(dot(material.emission, material.emission) > 0.0)
+        outAlbedo = material.emission;
+    else
+        outAlbedo = diffuse;
 
     outNormal = normalize(tri.vertices[0].normal * payload.bc.x
                         + tri.vertices[1].normal * payload.bc.y
@@ -221,6 +228,7 @@ void main()
 
     vec3 C = vec3(0.0);
     vec3 W = vec3(1.0);
+    vec3 firstHitAlbedo = vec3(0.0);
     vec3 firstHitNormal = vec3(0.0);
 
     for (int depth = 0; depth < pcRay.depth; depth++)
@@ -246,11 +254,15 @@ void main()
             break;
 
         Material mat;
+        vec3 albedo;
         vec3 N;
-        GetHitObjectData(mat, N);
+        GetHitObjectData(mat, albedo, N);
 
         if(depth == 0)
+        {
+            firstHitAlbedo = albedo;
             firstHitNormal = normalize(N);
+        }
         
         // emissive hit?
         if (dot(mat.emission, mat.emission) > 0.0) 
@@ -326,5 +338,6 @@ void main()
     {
         imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(C, 1.0));
     }
+    imageStore(albedoImage, ivec2(gl_LaunchIDEXT.xy), vec4(firstHitAlbedo, 1.0));
     imageStore(normalImage, ivec2(gl_LaunchIDEXT.xy), vec4(firstHitNormal, 1.0));
 }
