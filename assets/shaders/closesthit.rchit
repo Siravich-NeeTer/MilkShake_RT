@@ -28,8 +28,8 @@ struct GeometryNode {
     vec3 emission;
     float shininess;
 };
-layout(set = 0, binding = 4) buffer GeometryNodes { GeometryNode nodes[]; } geometryNodes;
-layout(set = 0, binding = 5) uniform sampler2D textures[];
+layout(set = 1, binding = 2) buffer GeometryNodes { GeometryNode nodes[]; } geometryNodes;
+layout(set = 1, binding = 3) uniform sampler2D textures[];
 
 #include "bufferreferences.glsl"
 #include "geometrytypes.glsl"

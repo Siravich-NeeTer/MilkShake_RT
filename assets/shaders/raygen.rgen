@@ -19,7 +19,9 @@ const float EPS = 1e-6;
 layout(push_constant) uniform _PushConstantRay { PushConstantRay pcRay; };
 layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 0, binding = 1, rgba8) uniform image2D image;
-layout(set = 0, binding = 2) uniform CameraProperties {
+layout(set = 0, binding = 2, rgba16) uniform image2D normalImage;
+
+layout(set = 1, binding = 0) uniform CameraProperties {
     mat4 viewInverse;
     mat4 projInverse;
     uint frame;
@@ -47,9 +49,9 @@ struct Emitter {
     float area;
 };
 
-layout(set = 0, binding = 3) buffer EmitterList  { Emitter      list[]; } emitter;
-layout(set = 0, binding = 4) buffer GeometryNodes{ GeometryNode nodes[]; } geometryNodes;
-layout(set = 0, binding = 5) uniform sampler2D textures[];
+layout(set = 1, binding = 1) buffer EmitterList  { Emitter      list[]; } emitter;
+layout(set = 1, binding = 2) buffer GeometryNodes{ GeometryNode nodes[]; } geometryNodes;
+layout(set = 1, binding = 3) uniform sampler2D textures[];
 
 // -----------------------------------------------------------------------------
 layout(location = 0) rayPayloadEXT RayPayload payload;
@@ -219,6 +221,7 @@ void main()
 
     vec3 C = vec3(0.0);
     vec3 W = vec3(1.0);
+    vec3 firstHitNormal = vec3(0.0);
 
     for (int depth = 0; depth < pcRay.depth; depth++)
     {
@@ -245,6 +248,9 @@ void main()
         Material mat;
         vec3 N;
         GetHitObjectData(mat, N);
+
+        if(depth == 0)
+            firstHitNormal = normalize(N);
         
         // emissive hit?
         if (dot(mat.emission, mat.emission) > 0.0) 
@@ -320,4 +326,5 @@ void main()
     {
         imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(C, 1.0));
     }
+    imageStore(normalImage, ivec2(gl_LaunchIDEXT.xy), vec4(firstHitNormal, 1.0));
 }

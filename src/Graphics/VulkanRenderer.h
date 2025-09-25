@@ -14,6 +14,8 @@
 #include <imgui/imgui_impl_glfw.h>
 #include <imgui/imgui_impl_vulkan.h>
 
+#include <optix.h>
+
 #include <iostream>
 #include <fstream>
 #include <stdexcept>
@@ -285,6 +287,10 @@ namespace MilkShake
                 VkDescriptorPool m_RtDescriptorPool;
                 VkDescriptorSet m_RtDescriptorSet;
                 VkDescriptorSetLayout m_RtDescriptorSetLayout;
+                
+                VkDescriptorPool m_ResourcesDescriptorPool;
+                VkDescriptorSet m_ResourcesDescriptorSet;
+                VkDescriptorSetLayout m_ResourcesDescriptorSetLayout;
 
                 std::vector<AccelerationStructure> m_BottomLevelAS;
                 AccelerationStructure m_TopLevelAS{};
@@ -292,6 +298,9 @@ namespace MilkShake
                 VkImage m_StorageImage;
                 VkDeviceMemory m_StorageImageMemory;
                 VkImageView m_StorageImageView;
+                VkImage m_StorageNormalImage;
+                VkDeviceMemory m_StorageNormalImageMemory;
+                VkImageView m_StorageNormalImageView;
 
                 VkTransformMatrixKHR transformMatrix = {
                     1.0f, 0.0f, 0.0f, 0.0f,
@@ -391,6 +400,8 @@ namespace MilkShake
                 void CreateEmitterBuffer();
 
                 void CreateRayTracingPipeline();
+                void CreateRayTracingDescriptorPool();
+                void CreateRayTracingDescriptorSetLayout();
                 void CreateRayTracingDescriptorSets();
                 void CreateRayTracingUniformBuffer();
 

@@ -689,7 +689,9 @@ namespace MilkShake
                 Dispatch the ray tracing commands
             */
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RtPipeline);
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RtPipelineLayout, 0, 1, &m_RtDescriptorSet, 0, 0);
+
+            std::vector<VkDescriptorSet> descSets{ m_RtDescriptorSet, m_ResourcesDescriptorSet };
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, m_RtPipelineLayout, 0, static_cast<uint32_t>(descSets.size()), descSets.data(), 0, nullptr);
 
             vkCmdPushConstants(commandBuffer, m_RtPipelineLayout, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 0, sizeof(PushConstantRay), &pcRay);
 
@@ -1329,9 +1331,13 @@ namespace MilkShake
 
             CreateStorageImage();
             CreateRayTracingUniformBuffer();
+
+            CreateRayTracingDescriptorPool();
+            CreateRayTracingDescriptorSetLayout();
+            CreateRayTracingDescriptorSets();
+            
             CreateRayTracingPipeline();
             CreateShaderBindingTables();
-            CreateRayTracingDescriptorSets();
         }
         void VulkanRenderer::UpdatePushConstantRay()
         {
@@ -1351,6 +1357,8 @@ namespace MilkShake
             vkDestroyPipelineLayout(m_Device, m_RtPipelineLayout, nullptr);
             vkDestroyDescriptorPool(m_Device, m_RtDescriptorPool, nullptr);
             vkDestroyDescriptorSetLayout(m_Device, m_RtDescriptorSetLayout, nullptr);
+            vkDestroyDescriptorPool(m_Device, m_ResourcesDescriptorPool, nullptr);
+            vkDestroyDescriptorSetLayout(m_Device, m_ResourcesDescriptorSetLayout, nullptr);
 
             DestroyStorageImage();
             for (auto& blas : m_BottomLevelAS)
@@ -1930,56 +1938,16 @@ namespace MilkShake
 
         void VulkanRenderer::CreateRayTracingPipeline()
         {
-            // [DONE] TODO: Added TextureCount on model
-            uint32_t imageCount = static_cast<uint32_t>(m_Textures.size());
-
-            std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings =
-            {
-                // Binding 0: Top level acceleration structure
-                VkDescriptorSetLayoutBinding{ 0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, nullptr },
-                // Binding 1: Ray tracing result image
-                VkDescriptorSetLayoutBinding{ 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, nullptr },
-                // Binding 2: Uniform buffer
-                VkDescriptorSetLayoutBinding{ 2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, nullptr },
-                // Binding 3: Emitter buffer
-                VkDescriptorSetLayoutBinding{ 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, nullptr },
-                // Binding 4: Geometry node information SSBO
-                VkDescriptorSetLayoutBinding{ 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR, nullptr },
-                // [DONE] TODO: Binding 5: All images used by the glTF model
-                VkDescriptorSetLayoutBinding{ 5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, imageCount, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR, nullptr },
-            };
-
-            // Unbound Set
-            VkDescriptorSetLayoutBindingFlagsCreateInfoEXT setLayoutBindingFlags{};
-            setLayoutBindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
-            setLayoutBindingFlags.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-            std::vector<VkDescriptorBindingFlagsEXT> descriptorBindingFlags =
-            {
-                0,
-                0,
-                0,
-                0,
-                0,
-                VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT
-            };
-            setLayoutBindingFlags.pBindingFlags = descriptorBindingFlags.data();
-
-            VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{};
-            descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-            descriptorSetLayoutCreateInfo.pBindings = setLayoutBindings.data();
-            descriptorSetLayoutCreateInfo.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-            descriptorSetLayoutCreateInfo.pNext = &setLayoutBindingFlags;
-            vkCreateDescriptorSetLayout(m_Device, &descriptorSetLayoutCreateInfo, nullptr, &m_RtDescriptorSetLayout);
-
             VkPushConstantRange pushConstant{};
             pushConstant.offset = 0;
             pushConstant.size = sizeof(PushConstantRay);
             pushConstant.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
 
+            std::vector<VkDescriptorSetLayout> descriptorSetLayouts{ m_RtDescriptorSetLayout, m_ResourcesDescriptorSetLayout };
             VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
             pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-            pipelineLayoutCreateInfo.pSetLayouts = &m_RtDescriptorSetLayout;
-            pipelineLayoutCreateInfo.setLayoutCount = 1;
+            pipelineLayoutCreateInfo.pSetLayouts = descriptorSetLayouts.data();
+            pipelineLayoutCreateInfo.setLayoutCount = descriptorSetLayouts.size();
             pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstant;
             pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
             vkCreatePipelineLayout(m_Device, &pipelineLayoutCreateInfo, nullptr, &m_RtPipelineLayout);
@@ -2046,11 +2014,24 @@ namespace MilkShake
             rayTracingPipelineCI.layout = m_RtPipelineLayout;
             vkCreateRayTracingPipelinesKHR(m_Device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &rayTracingPipelineCI, nullptr, &m_RtPipeline);
         }
-        void VulkanRenderer::CreateRayTracingDescriptorSets()
+        void VulkanRenderer::CreateRayTracingDescriptorPool()
         {
-            // [DONE] TODO: Load Texture
             uint32_t imageCount = static_cast<uint32_t>(m_Textures.size());
-            std::vector<VkDescriptorPoolSize> poolSizes = {
+
+            // RayTracingDescriptorPool
+            std::vector<VkDescriptorPoolSize> rtPoolSizes = {
+                { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1 },
+                { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 10 }
+            };
+            VkDescriptorPoolCreateInfo descriptorPoolCreateInfo{};
+            descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            descriptorPoolCreateInfo.poolSizeCount = static_cast<uint32_t>(rtPoolSizes.size());
+            descriptorPoolCreateInfo.pPoolSizes = rtPoolSizes.data();
+            descriptorPoolCreateInfo.maxSets = 1;
+            vkCreateDescriptorPool(m_Device, &descriptorPoolCreateInfo, nullptr, &m_RtDescriptorPool);
+
+            // ResourcesDescriptorPool
+            std::vector<VkDescriptorPoolSize> resourcesPoolSizes = {
                 { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1 },
                 { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 },
                 { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1 },
@@ -2058,26 +2039,71 @@ namespace MilkShake
                 { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 },
                 { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, imageCount }
             };
+            descriptorPoolCreateInfo.poolSizeCount = static_cast<uint32_t>(resourcesPoolSizes.size());
+            descriptorPoolCreateInfo.pPoolSizes = resourcesPoolSizes.data();
+            vkCreateDescriptorPool(m_Device, &descriptorPoolCreateInfo, nullptr, &m_ResourcesDescriptorPool);
+        }
+        void VulkanRenderer::CreateRayTracingDescriptorSetLayout()
+        {
+            uint32_t imageCount = static_cast<uint32_t>(m_Textures.size());
 
-            VkDescriptorPoolCreateInfo descriptorPoolCreateInfo{};
-            descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-            descriptorPoolCreateInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-            descriptorPoolCreateInfo.pPoolSizes = poolSizes.data();
-            descriptorPoolCreateInfo.maxSets = 1;
-            vkCreateDescriptorPool(m_Device, &descriptorPoolCreateInfo, nullptr, &m_RtDescriptorPool);
+            // RayTracingDescriptorSetLayout (set = 0)
+            std::vector<VkDescriptorSetLayoutBinding> rtSetLayoutBindings =
+            {
+                // Binding 0: Top level acceleration structure
+                VkDescriptorSetLayoutBinding{ 0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, nullptr },
+                // Binding 1: Ray tracing result image
+                VkDescriptorSetLayoutBinding{ 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, nullptr },
+                // Binding 2: Ray tracing normal image
+                VkDescriptorSetLayoutBinding{ 2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, nullptr }
+            };
 
-            VkDescriptorSetVariableDescriptorCountAllocateInfoEXT variableDescriptorCountAllocInfo{};
-            uint32_t variableDescCounts[] = { imageCount };
-            variableDescriptorCountAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT;
-            variableDescriptorCountAllocInfo.descriptorSetCount = 1;
-            variableDescriptorCountAllocInfo.pDescriptorCounts = variableDescCounts;
+            VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{};
+            descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            descriptorSetLayoutCreateInfo.pBindings = rtSetLayoutBindings.data();
+            descriptorSetLayoutCreateInfo.bindingCount = static_cast<uint32_t>(rtSetLayoutBindings.size());
+            vkCreateDescriptorSetLayout(m_Device, &descriptorSetLayoutCreateInfo, nullptr, &m_RtDescriptorSetLayout);
+            
+            // ResourcesDescriptorSetLayout (set = 1)
+            std::vector<VkDescriptorSetLayoutBinding> resourceSetLayoutBindings =
+            {
+                // Binding 0: Uniform buffer
+                VkDescriptorSetLayoutBinding{ 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, nullptr },
+                // Binding 1: Emitter buffer
+                VkDescriptorSetLayoutBinding{ 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR, nullptr },
+                // Binding 2: Geometry node information SSBO
+                VkDescriptorSetLayoutBinding{ 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR, nullptr },
+                // Binding 3: All images used by the glTF model
+                VkDescriptorSetLayoutBinding{ 3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, imageCount, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR, nullptr },
+            };
+            // Unbound Set
+            VkDescriptorSetLayoutBindingFlagsCreateInfoEXT setLayoutBindingFlags{};
+            setLayoutBindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
+            setLayoutBindingFlags.bindingCount = static_cast<uint32_t>(resourceSetLayoutBindings.size());
+            std::vector<VkDescriptorBindingFlagsEXT> descriptorBindingFlags =
+            {
+                0,
+                0,
+                0,
+                VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT
+            };
+            setLayoutBindingFlags.pBindingFlags = descriptorBindingFlags.data();
 
+            descriptorSetLayoutCreateInfo.pBindings = resourceSetLayoutBindings.data();
+            descriptorSetLayoutCreateInfo.bindingCount = static_cast<uint32_t>(resourceSetLayoutBindings.size());
+            descriptorSetLayoutCreateInfo.pNext = &setLayoutBindingFlags;
+            vkCreateDescriptorSetLayout(m_Device, &descriptorSetLayoutCreateInfo, nullptr, &m_ResourcesDescriptorSetLayout);
+        }
+        void VulkanRenderer::CreateRayTracingDescriptorSets()
+        {
+            uint32_t imageCount = static_cast<uint32_t>(m_Textures.size());
+
+            // RayTracingDescriptorSets
             VkDescriptorSetAllocateInfo descriptorSetAllocateInfo{};
             descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
             descriptorSetAllocateInfo.descriptorPool = m_RtDescriptorPool;
             descriptorSetAllocateInfo.pSetLayouts = &m_RtDescriptorSetLayout;
             descriptorSetAllocateInfo.descriptorSetCount = 1;
-            descriptorSetAllocateInfo.pNext = &variableDescriptorCountAllocInfo;
             vkAllocateDescriptorSets(m_Device, &descriptorSetAllocateInfo, &m_RtDescriptorSet);
 
             VkWriteDescriptorSetAccelerationStructureKHR descriptorAccelerationStructureInfo{};
@@ -2095,7 +2121,8 @@ namespace MilkShake
             accelerationStructureWrite.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
 
             VkDescriptorImageInfo storageImageDescriptor{ VK_NULL_HANDLE, m_StorageImageView, VK_IMAGE_LAYOUT_GENERAL };
-
+            VkDescriptorImageInfo storageNormalImageDescriptor{ VK_NULL_HANDLE, m_StorageNormalImageView, VK_IMAGE_LAYOUT_GENERAL };
+            
             std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
                 // Binding 0: Top level acceleration structure
                 accelerationStructureWrite,
@@ -2108,29 +2135,55 @@ namespace MilkShake
                     .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
                     .pImageInfo = &storageImageDescriptor
                 },
-                // Binding 2: Uniform data
+                // Binding 1: Ray tracing normal image
                 VkWriteDescriptorSet{
                     .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                     .dstSet = m_RtDescriptorSet,
                     .dstBinding = 2,
                     .descriptorCount = 1,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                    .pImageInfo = &storageNormalImageDescriptor
+                }
+            };
+
+            vkUpdateDescriptorSets(m_Device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, VK_NULL_HANDLE);
+
+            // ResourcesDescriptorSets
+            VkDescriptorSetVariableDescriptorCountAllocateInfoEXT variableDescriptorCountAllocInfo{};
+            uint32_t variableDescCounts[] = { imageCount };
+            variableDescriptorCountAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT;
+            variableDescriptorCountAllocInfo.descriptorSetCount = 1;
+            variableDescriptorCountAllocInfo.pDescriptorCounts = variableDescCounts;
+
+            descriptorSetAllocateInfo.descriptorPool = m_ResourcesDescriptorPool;
+            descriptorSetAllocateInfo.pSetLayouts = &m_ResourcesDescriptorSetLayout;
+            descriptorSetAllocateInfo.pNext = &variableDescriptorCountAllocInfo;
+            vkAllocateDescriptorSets(m_Device, &descriptorSetAllocateInfo, &m_ResourcesDescriptorSet);
+
+            writeDescriptorSets = {
+                // Binding 0: Uniform data
+                VkWriteDescriptorSet{
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .dstSet = m_ResourcesDescriptorSet,
+                    .dstBinding = 0,
+                    .descriptorCount = 1,
                     .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
                     .pBufferInfo = &m_RtUniformBuffer.descriptor
                 },
-                // Binding 3: Emitter List information SSBO
+                // Binding 1: Emitter List information SSBO
                 VkWriteDescriptorSet{
                     .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                    .dstSet = m_RtDescriptorSet,
-                    .dstBinding = 3,
+                    .dstSet = m_ResourcesDescriptorSet,
+                    .dstBinding = 1,
                     .descriptorCount = 1,
                     .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                     .pBufferInfo = &m_EmitterBuffer.descriptor
                 },
-                // Binding 4: Geometry node information SSBO
+                // Binding 2: Geometry node information SSBO
                 VkWriteDescriptorSet{
                     .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                    .dstSet = m_RtDescriptorSet,
-                    .dstBinding = 4,
+                    .dstSet = m_ResourcesDescriptorSet,
+                    .dstBinding = 2,
                     .descriptorCount = 1,
                     .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                     .pBufferInfo = &m_GeometryNodesBuffer.descriptor
@@ -2139,7 +2192,7 @@ namespace MilkShake
 
             // Image descriptors for the image array
             std::vector<VkDescriptorImageInfo> textureDescriptors{};
-            // [DONE] TODO: Load Model Texture
+            // Load Model Texture
             for (auto& texture : m_Textures) {
                 VkDescriptorImageInfo descriptor{};
                 descriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -2148,12 +2201,13 @@ namespace MilkShake
                 textureDescriptors.push_back(descriptor);
             }
 
+            // Binding 3: Textures
             VkWriteDescriptorSet writeDescriptorImgArray{};
             writeDescriptorImgArray.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            writeDescriptorImgArray.dstBinding = 5;
+            writeDescriptorImgArray.dstBinding = 3;
             writeDescriptorImgArray.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             writeDescriptorImgArray.descriptorCount = imageCount;
-            writeDescriptorImgArray.dstSet = m_RtDescriptorSet;
+            writeDescriptorImgArray.dstSet = m_ResourcesDescriptorSet;
             writeDescriptorImgArray.pImageInfo = textureDescriptors.data();
             writeDescriptorSets.push_back(writeDescriptorImgArray);
 
@@ -2226,37 +2280,51 @@ namespace MilkShake
             // Release resources if image is to be recreated
             if (m_StorageImage != VK_NULL_HANDLE) 
             {
-                vkDestroyImageView(m_Device, m_StorageImageView, nullptr);
-                vkDestroyImage(m_Device, m_StorageImage, nullptr);
-                vkFreeMemory(m_Device, m_StorageImageMemory, nullptr);
+                DestroyStorageImage();
 
                 m_StorageImage = VK_NULL_HANDLE;
                 m_StorageImageView = VK_NULL_HANDLE;
                 m_StorageImageMemory = VK_NULL_HANDLE;
+
+                m_StorageNormalImage = VK_NULL_HANDLE;
+                m_StorageNormalImageView = VK_NULL_HANDLE;
+                m_StorageNormalImageMemory = VK_NULL_HANDLE;
             }
 
             CreateImage(m_SwapChainExtent.width, m_SwapChainExtent.height,
-                m_SwapChainImageFormat,
+                VK_FORMAT_R16G16B16A16_SFLOAT,
                 VK_IMAGE_TILING_OPTIMAL,
                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                 m_StorageImage, m_StorageImageMemory);
+            m_StorageImageView = CreateImageView(m_StorageImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
+            Utility::TransitionImageLayout(*this, m_CommandPool, m_StorageImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
-            m_StorageImageView = CreateImageView(m_StorageImage, m_SwapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
-
-            Utility::TransitionImageLayout(*this, m_CommandPool, m_StorageImage, m_SwapChainImageFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+            CreateImage(m_SwapChainExtent.width, m_SwapChainExtent.height,
+                VK_FORMAT_R16G16B16A16_SFLOAT,
+                VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                m_StorageNormalImage, m_StorageNormalImageMemory);
+            m_StorageNormalImageView = CreateImageView(m_StorageNormalImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
+            Utility::TransitionImageLayout(*this, m_CommandPool, m_StorageNormalImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
         }
         void VulkanRenderer::DestroyStorageImage()
         {
             vkDestroyImageView(m_Device, m_StorageImageView, nullptr);
             vkDestroyImage(m_Device, m_StorageImage, nullptr);
             vkFreeMemory(m_Device, m_StorageImageMemory, nullptr);
+
+            vkDestroyImageView(m_Device, m_StorageNormalImageView, nullptr);
+            vkDestroyImage(m_Device, m_StorageNormalImage, nullptr);
+            vkFreeMemory(m_Device, m_StorageNormalImageMemory, nullptr);
         }
         void VulkanRenderer::ReCreateStorageImage()
         {
             CreateStorageImage();
 
             VkDescriptorImageInfo storageImageDescriptor{ VK_NULL_HANDLE, m_StorageImageView, VK_IMAGE_LAYOUT_GENERAL };
+            VkDescriptorImageInfo storageNormalImageDescriptor{ VK_NULL_HANDLE, m_StorageNormalImageView, VK_IMAGE_LAYOUT_GENERAL };
             VkWriteDescriptorSet resultImageWrite{};
             resultImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             resultImageWrite.dstSet = m_RtDescriptorSet;
@@ -2264,7 +2332,9 @@ namespace MilkShake
             resultImageWrite.dstBinding = 1;
             resultImageWrite.pImageInfo = &storageImageDescriptor;
             resultImageWrite.descriptorCount = 1;
-
+            vkUpdateDescriptorSets(m_Device, 1, &resultImageWrite, 0, VK_NULL_HANDLE);
+            
+            resultImageWrite.pImageInfo = &storageNormalImageDescriptor;
             vkUpdateDescriptorSets(m_Device, 1, &resultImageWrite, 0, VK_NULL_HANDLE);
         }
 
