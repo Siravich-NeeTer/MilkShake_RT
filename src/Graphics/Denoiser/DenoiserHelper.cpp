@@ -128,7 +128,7 @@ namespace MilkShake
         }
 
         // ------------------------------- OptiX Denoiser wrapper
-        void OptixInitDenoiserNormalOnly(OptixDenoiserCtx& O, int W, int H)
+        void InitOptixDenoiser(OptixDenoiserCtx& O)
         {
             OPTIX_CHECK(optixInit());
             // Ensure a CUDA context exists
@@ -143,17 +143,6 @@ namespace MilkShake
             dopt.guideNormal = 1;
 
             OPTIX_CHECK(optixDenoiserCreate(O.ctx, OPTIX_DENOISER_MODEL_KIND_HDR, &dopt, &O.den));
-
-            OptixDenoiserSizes sizes{};
-            OPTIX_CHECK(optixDenoiserComputeMemoryResources(O.den, W, H, &sizes));
-            O.stateSize = sizes.stateSizeInBytes;
-            O.scratchSize = sizes.withoutOverlapScratchSizeInBytes;
-            O.W = W; O.H = H;
-
-            CU_CHECK(cuMemAlloc(&O.d_state, O.stateSize));
-            CU_CHECK(cuMemAlloc(&O.d_scratch, O.scratchSize));
-
-            OPTIX_CHECK(optixDenoiserSetup(O.den, 0/*stream*/, W, H, O.d_state, O.stateSize, O.d_scratch, O.scratchSize));
         }
 
         OptixImage2D MakeImage2D(void* devPtrFloat4, int W, int H)
@@ -228,7 +217,7 @@ namespace MilkShake
             vkCmdCopyBufferToImage(cmd, src, dst, VK_IMAGE_LAYOUT_GENERAL, 1, &w);
         }
 
-        void CreateDenoiser(DenoiseInterop& I, VkDevice dev, VkPhysicalDevice phys, VkQueue q, uint32_t qf,
+        void CreateOptiXDenoiser(DenoiseInterop& I, VkDevice dev, VkPhysicalDevice phys, VkQueue q, uint32_t qf,
             int W, int H)
         {
             I.device = dev; I.phys = phys; I.queue = q; I.queueFamily = qf; I.W = W; I.H = H;
@@ -253,11 +242,22 @@ namespace MilkShake
             I.cuWait = ImportCudaSemaphore(I.vkToCuda);
             I.cuSignal = ImportCudaSemaphore(I.cudaToVk);
 
-            // OptiX
-            OptixInitDenoiserNormalOnly(I.optix, W, H);
+            OptixDenoiserSizes sizes{};
+            OPTIX_CHECK(optixDenoiserComputeMemoryResources(I.optix.den, W, H, &sizes));
+            I.optix.stateSize = sizes.stateSizeInBytes;
+            I.optix.scratchSize = sizes.withoutOverlapScratchSizeInBytes;
+            I.optix.W = W; I.optix.H = H;
+
+            CU_CHECK(cuMemAlloc(&I.optix.d_state, I.optix.stateSize));
+            CU_CHECK(cuMemAlloc(&I.optix.d_scratch, I.optix.scratchSize));
+
+            OPTIX_CHECK(optixDenoiserSetup(I.optix.den, 0/*stream*/, W, H, I.optix.d_state, I.optix.stateSize, I.optix.d_scratch, I.optix.scratchSize));
         }
-        void DestroyDenoiser(DenoiseInterop& I)
+        void DestroyOptiXDenoiser(DenoiseInterop& I)
         {
+            CU_CHECK(cuMemFree(I.optix.d_state));
+            CU_CHECK(cuMemFree(I.optix.d_scratch));
+
             DestroyExportableBuffer(I.device, I.colorBuf);
             DestroyExportableBuffer(I.device, I.albedoBuf);
             DestroyExportableBuffer(I.device, I.normalBuf);

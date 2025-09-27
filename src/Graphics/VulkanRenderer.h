@@ -44,8 +44,8 @@ namespace MilkShake
 {
     namespace Graphics
     {
-        const uint32_t WIDTH = 800;
-        const uint32_t HEIGHT = 600;
+        const uint32_t WIDTH = 1920;
+        const uint32_t HEIGHT = 1080;
 
         const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -380,9 +380,13 @@ namespace MilkShake
 
                 // Core Ray-Tracing Function
                 void InitRayTracing();
-                void InitDenoiser();
                 void UpdatePushConstantRay();
                 void CleanRayTracing();
+
+                void InitDenoiser();
+                void CreateDenoiser();
+                void ReCreateDenoiser();
+                void DestroyDenoiser();
 
                 // Create a scratch buffer to hold temporary data for a ray tracing acceleration structure
                 ScratchBuffer CreateScratchBuffer(VkDeviceSize size);

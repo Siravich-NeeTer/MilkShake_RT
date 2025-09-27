@@ -59,6 +59,7 @@ namespace MilkShake
 
             InitRayTracing();
             InitDenoiser();
+            CreateDenoiser();
 
             CreatePostUniformBuffer();
             CreatePostDescriptor();
@@ -122,6 +123,7 @@ namespace MilkShake
             {
                 delete model;
             }
+            DestroyDenoiser();
             CleanRayTracing();
             for (auto& shaderModule : m_ShaderModules)
             {
@@ -725,6 +727,7 @@ namespace MilkShake
             {
                 RecreateSwapChain();
                 ReCreateStorageImage();
+                ReCreateDenoiser();
                 UpdatePostProcessUniformData();
                 uniformData.frame = 0;
                 return;
@@ -800,6 +803,7 @@ namespace MilkShake
                 m_FramebufferResized = false;
                 RecreateSwapChain();
                 ReCreateStorageImage();
+                ReCreateDenoiser();
                 UpdatePostDescriptor();
                 UpdatePostProcessUniformData();
                 uniformData.frame = 0;
@@ -1348,11 +1352,6 @@ namespace MilkShake
             CreateRayTracingPipeline();
             CreateShaderBindingTables();
         }
-        void VulkanRenderer::InitDenoiser()
-        {
-            CreateDenoiser(m_DenoiseOptiX, m_Device, m_PhysicalDevice, m_GraphicsQueue, FindQueueFamilies(m_PhysicalDevice).graphicsFamily.value(), m_SwapChainExtent.width, m_SwapChainExtent.height);
-            m_DenoiseOptiX.cmdPool = m_CommandPool;
-        }
         void VulkanRenderer::UpdatePushConstantRay()
         {
             pcRay.frameSeed = rand() % 32768;
@@ -1367,8 +1366,6 @@ namespace MilkShake
         }
         void VulkanRenderer::CleanRayTracing()
         {
-            DestroyDenoiser(m_DenoiseOptiX);
-
             vkDestroyPipeline(m_Device, m_RtPipeline, nullptr);
             vkDestroyPipelineLayout(m_Device, m_RtPipelineLayout, nullptr);
             vkDestroyDescriptorPool(m_Device, m_RtDescriptorPool, nullptr);
@@ -1398,6 +1395,26 @@ namespace MilkShake
             m_RtUniformBuffer.Destroy();
             m_EmitterBuffer.Destroy();
             m_GeometryNodesBuffer.Destroy();
+        }
+
+        void VulkanRenderer::InitDenoiser()
+        {
+            InitOptixDenoiser(m_DenoiseOptiX.optix);
+        }
+        void VulkanRenderer::CreateDenoiser()
+        {
+            // OptiX Denoiser
+            CreateOptiXDenoiser(m_DenoiseOptiX, m_Device, m_PhysicalDevice, m_GraphicsQueue, FindQueueFamilies(m_PhysicalDevice).graphicsFamily.value(), m_SwapChainExtent.width, m_SwapChainExtent.height);
+            m_DenoiseOptiX.cmdPool = m_CommandPool;
+        }
+        void VulkanRenderer::ReCreateDenoiser()
+        {
+            DestroyDenoiser();
+            CreateDenoiser();
+        }
+        void VulkanRenderer::DestroyDenoiser()
+        {
+            DestroyOptiXDenoiser(m_DenoiseOptiX);
         }
         
         ScratchBuffer VulkanRenderer::CreateScratchBuffer(VkDeviceSize size)

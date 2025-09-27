@@ -84,7 +84,7 @@ namespace MilkShake
             int                 W{}, H{};
         };
 
-        void OptixInitDenoiserNormalOnly(OptixDenoiserCtx& O, int W, int H);
+        void InitOptixDenoiser(OptixDenoiserCtx& O);
         OptixImage2D MakeImage2D(void* devPtrFloat4, int W, int H);
 
         // Runs denoiser: beauty in/out, albedo & normal as a guid
@@ -126,8 +126,8 @@ namespace MilkShake
 
         void RecordCopyImageToBuffer(VkCommandBuffer cmd, VkImage src, VkBuffer dst, int W, int H);
         void RecordCopyBufferToImage(VkCommandBuffer cmd, VkBuffer src, VkImage dst, int W, int H);
-        void CreateDenoiser(DenoiseInterop& I, VkDevice dev, VkPhysicalDevice phys, VkQueue q, uint32_t qf, int W, int H);
-        void DestroyDenoiser(DenoiseInterop& I);
+        void CreateOptiXDenoiser(DenoiseInterop& I, VkDevice dev, VkPhysicalDevice phys, VkQueue q, uint32_t qf, int W, int H);
+        void DestroyOptiXDenoiser(DenoiseInterop& I);
 
         void DenoiseFrame(DenoiseInterop& I,
             VkImage noisyColorImage,
