@@ -84,6 +84,12 @@
     <ClCompile Include="src\Graphics\Utility\Shader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\Graphics\Denoiser\DenoiserHelper.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="External Libraries\OptiX\include\optix_function_table_definition.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Graphics\Utility\VulkanHelper.h">
@@ -177,6 +183,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\Graphics\Utility\GraphicsUtility.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Graphics\Denoiser\DenoiserHelper.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

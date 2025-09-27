@@ -104,7 +104,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>MILKSHAKE_DEBUG;_CRT_SECURE_NO_WARNINGS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)assets;$(SolutionDir)External Libraries;$(SolutionDir)External Libraries\vulkan\Include;$(SolutionDir)External Libraries\GLFW\include;$(SolutionDir)External Libraries\stb;$(SolutionDir)External Libraries\assimp\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)assets;$(SolutionDir)External Libraries;$(SolutionDir)External Libraries\vulkan\Include;$(SolutionDir)External Libraries\GLFW\include;$(SolutionDir)External Libraries\stb;$(SolutionDir)External Libraries\assimp\include;$(SolutionDir)External Libraries\OptiX\include;$(CUDA_PATH)\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -112,8 +112,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)External Libraries\GLFW\lib-vc2022;$(SolutionDir)External Libraries\assimp\lib64;$(SolutionDir)External Libraries\vulkan\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vulkan-1.lib;shaderc_combinedd.lib;assimp-vc142-mtd.lib;glfw3.lib;User32.lib;Gdi32.lib;Shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)External Libraries\GLFW\lib-vc2022;$(SolutionDir)External Libraries\assimp\lib64;$(SolutionDir)External Libraries\vulkan\Lib;$(CUDA_PATH)\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>vulkan-1.lib;cuda.lib;cudart.lib;shaderc_combinedd.lib;assimp-vc142-mtd.lib;glfw3.lib;User32.lib;Gdi32.lib;Shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>
@@ -128,7 +128,7 @@ copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mtd.dll" "$(OutD
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)assets;$(SolutionDir)External Libraries;$(SolutionDir)External Libraries\vulkan\Include;$(SolutionDir)External Libraries\GLFW\include;$(SolutionDir)External Libraries\stb;$(SolutionDir)External Libraries\assimp\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)assets;$(SolutionDir)External Libraries;$(SolutionDir)External Libraries\vulkan\Include;$(SolutionDir)External Libraries\GLFW\include;$(SolutionDir)External Libraries\stb;$(SolutionDir)External Libraries\assimp\include;$(SolutionDir)External Libraries\OptiX\include;$(CUDA_PATH)\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -138,8 +138,8 @@ copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mtd.dll" "$(OutD
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)External Libraries\GLFW\lib-vc2022;$(SolutionDir)External Libraries\assimp\lib64;$(SolutionDir)External Libraries\vulkan\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>vulkan-1.lib;shaderc_combined.lib;assimp-vc142-mt.lib;glfw3.lib;User32.lib;Gdi32.lib;Shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)External Libraries\GLFW\lib-vc2022;$(SolutionDir)External Libraries\assimp\lib64;$(SolutionDir)External Libraries\vulkan\Lib;$(CUDA_PATH)\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>vulkan-1.lib;cuda.lib;cudart.lib;shaderc_combined.lib;assimp-vc142-mt.lib;glfw3.lib;User32.lib;Gdi32.lib;Shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>
@@ -158,9 +158,11 @@ copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mt.dll" "$(OutDi
     <ClCompile Include="External Libraries\imgui\implot.cpp" />
     <ClCompile Include="External Libraries\imgui\implot_demo.cpp" />
     <ClCompile Include="External Libraries\imgui\implot_items.cpp" />
+    <ClCompile Include="External Libraries\OptiX\include\optix_function_table_definition.cpp" />
     <ClCompile Include="External Libraries\stb\stb_image.cpp" />
     <ClCompile Include="src\Camera.cpp" />
     <ClCompile Include="src\Core\MilkShakeEngine.cpp" />
+    <ClCompile Include="src\Graphics\Denoiser\DenoiserHelper.cpp" />
     <ClCompile Include="src\Input.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\Graphics\Buffer.cpp" />
@@ -188,6 +190,7 @@ copy "$(ProjectDir)External Libraries\assimp\bin64\assimp-vc142-mt.dll" "$(OutDi
     <ClInclude Include="External Libraries\stb\stb_image.h" />
     <ClInclude Include="src\Camera.h" />
     <ClInclude Include="src\Core\MilkShakeEngine.h" />
+    <ClInclude Include="src\Graphics\Denoiser\DenoiserHelper.h" />
     <ClInclude Include="src\Graphics\Utility\GraphicsUtility.h" />
     <ClInclude Include="src\Input.h" />
     <ClInclude Include="src\Math\AssimpGLMHelpers.h" />

@@ -34,6 +34,7 @@
 #include "shaders/shared_structs.h"
 
 #include "Descriptor.h"
+#include "Denoiser/DenoiserHelper.h"
 
 #include "Utility/GraphicsUtility.h"
 #include "Utility/VKValidation.h"
@@ -67,7 +68,16 @@ namespace MilkShake
             VK_KHR_SPIRV_1_4_EXTENSION_NAME,                // Validation tell me to add this! (Related: VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)
             VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,    // Validation tell me to add this! (Related: VK_KHR_SPIRV_1_4_EXTENSION_NAME)
             // - Required by Ray-Tracing Pipeline
-            VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME
+            VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+
+            // - Used in Denoising ()
+            #ifdef _WIN32
+            VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,
+            VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,
+            #else
+            VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+            VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME,
+            #endif
         };
 
         #ifdef NDEBUG
@@ -293,6 +303,10 @@ namespace MilkShake
                 std::vector<AccelerationStructure> m_BottomLevelAS;
                 AccelerationStructure m_TopLevelAS{};
 
+                VkImage m_DenoisedImage;
+                VkDeviceMemory m_DenoisedImageMemory;
+                VkImageView m_DenoisedImageView;
+
                 VkImage m_StorageImage;
                 VkDeviceMemory m_StorageImageMemory;
                 VkImageView m_StorageImageView;
@@ -315,6 +329,7 @@ namespace MilkShake
                 std::vector<Buffer> m_RtTransformBuffers;
                 
                 PushConstantRay pcRay;
+                bool isDenoise = false;
 
                 struct UniformData
                 {
@@ -361,8 +376,11 @@ namespace MilkShake
 
                 } m_ShaderBindingTables;
 
+                DenoiseInterop m_DenoiseOptiX;
+
                 // Core Ray-Tracing Function
                 void InitRayTracing();
+                void InitDenoiser();
                 void UpdatePushConstantRay();
                 void CleanRayTracing();
 

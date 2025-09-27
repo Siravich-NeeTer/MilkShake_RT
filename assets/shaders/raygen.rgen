@@ -214,7 +214,7 @@ void main()
     uint seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, pcRay.frameSeed);
 
     // subpixel jitter for AA
-    vec2 subpixel = (cam.frame == 0) ? vec2(0.5) : vec2(rnd(seed), rnd(seed));
+    vec2 subpixel = (cam.frame == 1) ? vec2(0.5) : vec2(rnd(seed), rnd(seed));
     vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + subpixel;
     vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
     vec2 d = inUV * 2.0 - 1.0;
@@ -242,7 +242,7 @@ void main()
 
         traceRayEXT(
             topLevelAS,
-            gl_RayFlagsOpaqueEXT,
+            gl_RayFlagsNoneEXT,
             0xFF,
             0, 0, 0,
             rayOrigin, tmin,
@@ -284,7 +284,7 @@ void main()
             payload.hit = true;
 
             traceRayEXT(topLevelAS,                         // acceleration structure
-                    gl_RayFlagsOpaqueEXT                    // rayFlags
+                    gl_RayFlagsNoneEXT                    // rayFlags
                     | gl_RayFlagsTerminateOnFirstHitEXT
                     | gl_RayFlagsSkipClosestHitShaderEXT,
                     0xFF,                                   // cullMask
@@ -327,12 +327,15 @@ void main()
     }
 
     // Accumulate
-    if (pcRay.accumulation && cam.frame > 0) 
+    if (pcRay.accumulation && cam.frame > 1) 
     {
-        float a = 1.0 / float(cam.frame + 1);
-        vec3 oldc = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
-        if (!any(isnan(C)) && !any(isinf(C)))
-            imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(mix(oldc, C, a), 1.0));
+        vec4 old = imageLoad(image, ivec2(gl_LaunchIDEXT.xy));
+        vec3 Ave = old.xyz;
+        float Nw = old.w;
+
+        vec3 newAve = Ave + (C - Ave) / Nw;
+        float newN = Nw + 1.0;
+        imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(newAve, newN));
     } 
     else 
     {

@@ -50,8 +50,15 @@ namespace MilkShake
             LoadLightModel("assets/models/bunny.obj",
                 glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(10.0f)),
                 glm::vec3(0.0f, 0.0f, 5.0f));
+            /*
+            LoadLightModel("assets/models/sphere.obj",
+                glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 3.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(1.0f)),
+                glm::vec3(5.0f));
+            */
+
 
             InitRayTracing();
+            InitDenoiser();
 
             CreatePostUniformBuffer();
             CreatePostDescriptor();
@@ -718,7 +725,6 @@ namespace MilkShake
             {
                 RecreateSwapChain();
                 ReCreateStorageImage();
-                UpdatePostDescriptor();
                 UpdatePostProcessUniformData();
                 uniformData.frame = 0;
                 return;
@@ -728,6 +734,7 @@ namespace MilkShake
                 throw std::runtime_error("failed to acquire swap chain image!");
             }
 
+            UpdatePostDescriptor();
             UpdatePushConstantRay();
             UpdateRayTracingUniformBuffer();
 
@@ -771,6 +778,8 @@ namespace MilkShake
             {
                 throw std::runtime_error("failed to submit draw command buffer!");
             }
+
+            DenoiseFrame(m_DenoiseOptiX, m_StorageImage, m_StorageAlbedoImage, m_StorageNormalImage, m_DenoisedImage);
 
             VkPresentInfoKHR presentInfo{};
             presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1210,7 +1219,7 @@ namespace MilkShake
         void VulkanRenderer::UpdatePostDescriptor()
         {
             VkDescriptorImageInfo imageInfo{};
-            imageInfo.imageView = m_StorageImageView;
+            imageInfo.imageView = isDenoise ? m_DenoisedImageView : m_StorageImageView;
             imageInfo.sampler = m_PostSampler;
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
@@ -1339,6 +1348,11 @@ namespace MilkShake
             CreateRayTracingPipeline();
             CreateShaderBindingTables();
         }
+        void VulkanRenderer::InitDenoiser()
+        {
+            CreateDenoiser(m_DenoiseOptiX, m_Device, m_PhysicalDevice, m_GraphicsQueue, FindQueueFamilies(m_PhysicalDevice).graphicsFamily.value(), m_SwapChainExtent.width, m_SwapChainExtent.height);
+            m_DenoiseOptiX.cmdPool = m_CommandPool;
+        }
         void VulkanRenderer::UpdatePushConstantRay()
         {
             pcRay.frameSeed = rand() % 32768;
@@ -1353,6 +1367,8 @@ namespace MilkShake
         }
         void VulkanRenderer::CleanRayTracing()
         {
+            DestroyDenoiser(m_DenoiseOptiX);
+
             vkDestroyPipeline(m_Device, m_RtPipeline, nullptr);
             vkDestroyPipelineLayout(m_Device, m_RtPipelineLayout, nullptr);
             vkDestroyDescriptorPool(m_Device, m_RtDescriptorPool, nullptr);
@@ -2290,7 +2306,7 @@ namespace MilkShake
         void VulkanRenderer::CreateStorageImage()
         {
             // Release resources if image is to be recreated
-            if (m_StorageImage != VK_NULL_HANDLE) 
+            if (m_StorageImage != VK_NULL_HANDLE)
             {
                 DestroyStorageImage();
 
@@ -2308,31 +2324,41 @@ namespace MilkShake
             }
 
             CreateImage(m_SwapChainExtent.width, m_SwapChainExtent.height,
-                VK_FORMAT_R16G16B16A16_SFLOAT,
+                VK_FORMAT_R32G32B32A32_SFLOAT,
                 VK_IMAGE_TILING_OPTIMAL,
-                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                 m_StorageImage, m_StorageImageMemory);
-            m_StorageImageView = CreateImageView(m_StorageImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
-            Utility::TransitionImageLayout(*this, m_CommandPool, m_StorageImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+            m_StorageImageView = CreateImageView(m_StorageImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
+            Utility::TransitionImageLayout(*this, m_CommandPool, m_StorageImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
             CreateImage(m_SwapChainExtent.width, m_SwapChainExtent.height,
-                VK_FORMAT_R16G16B16A16_SFLOAT,
+                VK_FORMAT_R32G32B32A32_SFLOAT,
                 VK_IMAGE_TILING_OPTIMAL,
                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                 m_StorageAlbedoImage, m_StorageAlbedoImageMemory);
-            m_StorageAlbedoImageView = CreateImageView(m_StorageAlbedoImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
-            Utility::TransitionImageLayout(*this, m_CommandPool, m_StorageAlbedoImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+            m_StorageAlbedoImageView = CreateImageView(m_StorageAlbedoImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
+            Utility::TransitionImageLayout(*this, m_CommandPool, m_StorageAlbedoImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
             CreateImage(m_SwapChainExtent.width, m_SwapChainExtent.height,
-                VK_FORMAT_R16G16B16A16_SFLOAT,
+                VK_FORMAT_R32G32B32A32_SFLOAT,
                 VK_IMAGE_TILING_OPTIMAL,
                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                 m_StorageNormalImage, m_StorageNormalImageMemory);
-            m_StorageNormalImageView = CreateImageView(m_StorageNormalImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
-            Utility::TransitionImageLayout(*this, m_CommandPool, m_StorageNormalImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+            m_StorageNormalImageView = CreateImageView(m_StorageNormalImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
+            Utility::TransitionImageLayout(*this, m_CommandPool, m_StorageNormalImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+        
+            CreateImage(m_SwapChainExtent.width, m_SwapChainExtent.height,
+                VK_FORMAT_R32G32B32A32_SFLOAT,
+                VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                m_DenoisedImage, m_DenoisedImageMemory);
+            m_DenoisedImageView = CreateImageView(m_DenoisedImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT);
+            Utility::TransitionImageLayout(*this, m_CommandPool, m_DenoisedImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+
         }
         void VulkanRenderer::DestroyStorageImage()
         {
@@ -2347,6 +2373,10 @@ namespace MilkShake
             vkDestroyImageView(m_Device, m_StorageNormalImageView, nullptr);
             vkDestroyImage(m_Device, m_StorageNormalImage, nullptr);
             vkFreeMemory(m_Device, m_StorageNormalImageMemory, nullptr);
+
+            vkDestroyImageView(m_Device, m_DenoisedImageView, nullptr);
+            vkDestroyImage(m_Device, m_DenoisedImage, nullptr);
+            vkFreeMemory(m_Device, m_DenoisedImageMemory, nullptr);
         }
         void VulkanRenderer::ReCreateStorageImage()
         {
@@ -2472,6 +2502,7 @@ namespace MilkShake
                     uniformData.frame = 0;
                 if (ImGui::Checkbox("Explicit", &pcRay.explicitLight))
                     uniformData.frame = 0;
+                ImGui::Checkbox("Denoise", &isDenoise);
                 ImGui::End();
 
                 ImGui::Render();
